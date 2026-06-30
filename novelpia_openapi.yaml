@@ -1730,6 +1730,71 @@ paths:
                 $ref: "#/components/schemas/PipeDelimitedResponse"
               example: "on|1||"
 
+  /proc/viewer_board_comment:
+    post:
+      tags: [사용자]
+      summary: 뷰어 게시판 댓글 처리 (다목적)
+      description: |
+        `mode` 파라미터로 동작을 구분하는 뷰어 게시판 댓글 관련 엔드포인트입니다.
+
+        | mode | 설명 | 인증 필요 |
+        |------|------|-----------|
+        | `get_user_block` | 로그인 회원의 전체 차단 목록 조회 | 필요 |
+
+        모든 모드는 `application/x-www-form-urlencoded` Content-Type을 사용합니다.
+      operationId: procViewerBoardComment
+      security:
+        - loginKeyCookie: []
+        - {}
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [mode]
+              properties:
+                mode:
+                  type: string
+                  enum:
+                    - get_user_block
+                  description: 처리 모드
+                  example: "get_user_block"
+                mem_no:
+                  type: string
+                  description: "`get_user_block` 모드에서 조회할 회원 번호"
+                  example: "453905"
+      responses:
+        "200":
+          description: |
+            모드에 따라 다른 JSON 응답을 반환합니다.
+
+            - `get_user_block`: `result.user_block` 에 차단된 회원 번호 문자열 배열 포함
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/BaseResponse"
+                  - type: object
+                    properties:
+                      result:
+                        type: object
+                        properties:
+                          user_block:
+                            type: array
+                            description: 차단된 회원 번호 목록 (문자열)
+                            items:
+                              type: string
+                            example: ["68187", "512785", "175598"]
+              examples:
+                get_user_block:
+                  summary: get_user_block 응답 예시
+                  value:
+                    status: "200"
+                    errmsg: ""
+                    result:
+                      user_block: ["68187", "512785", "175598", "488213", "161638"]
+
   /proc/emoticon_openstore:
     get:
       tags: [소설]

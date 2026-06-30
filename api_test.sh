@@ -771,6 +771,7 @@ if [[ -z "${LOGINKEY:-}" ]]; then
     skip "POST /proc/user — get_member_favorite_novel"
     skip "POST /proc/user — get_user_block_chk (mem_no=${PROFILE_MEM_NO})"
     skip "POST /proc/user — get_user_block_chk (mem_no=${UNBLOCKED_MEM_NO}, 비차단 기대)"
+    skip "POST /proc/viewer_board_comment — get_user_block (mem_no=${PROFILE_MEM_NO})"
     skip "POST /proc/novel_alarm — 로그인 상태 토글"
     skip "POST /proc/novel_like — 로그인 상태 토글 (CSRF 필요)"
     skip "POST /proc/board_option — vote_novel (CSRF 필요)"
@@ -796,6 +797,7 @@ else
         skip "POST /proc/user — get_member_favorite_novel"
         skip "POST /proc/user — get_user_block_chk (mem_no=${PROFILE_MEM_NO})"
         skip "POST /proc/user — get_user_block_chk (mem_no=${UNBLOCKED_MEM_NO}, 비차단 기대)"
+        skip "POST /proc/viewer_board_comment — get_user_block (mem_no=${PROFILE_MEM_NO})"
         skip "POST /proc/viewer_data — 유료 회차 (로그인)"
         skip "POST /proc/novel_alarm — 로그인 상태 토글"
         skip "POST /proc/novel_like — 로그인 상태 토글 (CSRF 필요)"
@@ -864,6 +866,28 @@ assert d.get('status') in ('200', 200), 'status != 200'
         fi
     else
         fail "POST /proc/user — get_user_block_chk (mem_no=${UNBLOCKED_MEM_NO}): JSON 파싱 실패"
+    fi
+
+    # 뷰어 게시판 — 전체 차단 목록 (get_user_block)
+    do_request "POST /proc/viewer_board_comment — get_user_block (mem_no=${PROFILE_MEM_NO})" "200" \
+        -X POST \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        -H "$COOKIE_HEADER" \
+        -d "mode=get_user_block&mem_no=${PROFILE_MEM_NO}" \
+        "${BASE_URL}/proc/viewer_board_comment"
+    if echo "$BODY" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+assert d.get('status') in ('200', 200), 'status != 200'
+assert 'result' in d, 'result 필드 없음'
+assert 'user_block' in d['result'], 'result.user_block 필드 없음'
+assert isinstance(d['result']['user_block'], list), 'user_block이 배열이 아님'
+" 2>/dev/null; then
+        BLOCK_CNT=$(echo "$BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d['result']['user_block']))" 2>/dev/null || echo "?")
+        info "차단 목록 ${BLOCK_CNT}명"
+    else
+        fail "POST /proc/viewer_board_comment — get_user_block: JSON 파싱 실패 또는 구조 오류"
+        info "응답: ${BODY:0:200}"
     fi
 
     # 선호작 목록
