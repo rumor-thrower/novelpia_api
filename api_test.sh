@@ -435,6 +435,51 @@ assert 'list' in won, 'list 필드 없음'
     fi
 }
 
+# 2-11a. 이모티콘 오픈스토어 — 이미지 URL → 그룹 조회 (getImgtoGrpEmt)
+#   그룹 1700: 댓글창의 천재 마법사
+#   그룹 126:  악마? 앙마! 메타짱
+w_emoticon_openstore_img_to_grp() {
+    local -A cases=(
+        [1700]="https://images.novelpia.com/imagebox/77/776dd92168dde5a663e265c80ef165ce_111886.png"
+        [126]="https://image.novelpia.com/img/emoticon/i258rd1u0s/01.png"
+    )
+    for grp in "${!cases[@]}"; do
+        local img="${cases[$grp]}"
+        wdo_request "POST /proc/emoticon_openstore — getImgtoGrpEmt (group=${grp})" "200" \
+            -X POST \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            --data-urlencode "mode=getImgtoGrpEmt" \
+            --data-urlencode "img=${img}" \
+            "${BASE_URL}/proc/emoticon_openstore"
+        if echo "$W_BODY" | python3 -c "
+import sys
+raw = sys.stdin.read().strip()
+assert raw.startswith('OK|'), f'OK| 접두사 없음: {raw[:80]}'
+import json
+arr = json.loads(raw[3:])
+assert len(arr) > 0, '결과 배열이 비어 있음'
+item = arr[0]
+assert 'emoticon_group_name' in item or 'stamp_name' in item, \
+    f'emoticon_group_name/stamp_name 필드 없음: {item}'
+if 'emoticon_group' in item:
+    assert str(item['emoticon_group']) == '${grp}', \
+        f'예상 그룹 ${grp}, 실제 {item[\"emoticon_group\"]}'
+" 2>/dev/null; then
+            local name
+            name=$(echo "$W_BODY" | python3 -c "
+import sys, json
+raw = sys.stdin.read().strip()
+item = json.loads(raw[3:])[0]
+print(item.get('emoticon_group_name', item.get('stamp_name','?')))
+" 2>/dev/null || echo "?")
+            info "파이프 응답 파싱 성공 — group=${grp}, name=${name}"
+        else
+            wfail "POST /proc/emoticon_openstore — getImgtoGrpEmt (group=${grp}) 파싱 실패"
+            echo "       응답: ${W_BODY:0:200}"
+        fi
+    done
+}
+
 # 2-11. 이모티콘 오픈스토어 — 작가 이모티콘 조회
 w_emoticon_openstore_writer() {
     wdo_request "GET /proc/emoticon_openstore — getWriterEmoticon" "200" \
@@ -763,6 +808,24 @@ assert d.get('status') in (401, '401'), 'status != 401'
     fi
 }
 
+# 2-27. GET /proc/emoticon_proc?mode=get_user_emoticon_group&target=sort (순서/표시 관리 변형)
+# 그룹 모드와 동일하게 비로그인 시 status=200 + 빈 배열. 로그인 시 항목에 is_hide 플래그 포함.
+w_emoticon_get_user_group_sort_anon() {
+    wdo_request "GET /proc/emoticon_proc — get_user_emoticon_group&target=sort (비로그인)" "200" \
+        "${BASE_URL}/proc/emoticon_proc?mode=get_user_emoticon_group&target=sort"
+    if echo "$W_BODY" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+assert d.get('status') in (200, '200'), 'status != 200'
+assert isinstance(d.get('data'), list), 'data 필드가 배열이 아님'
+" 2>/dev/null; then
+        info "target=sort 변형 응답 정확: status=200, data 배열 (비로그인이면 0)"
+    else
+        wfail "GET /proc/emoticon_proc — target=sort: status=200/배열 미확인"
+        echo "       응답: ${W_BODY:0:200}"
+    fi
+}
+
 par_begin
 par_run w_episode_count_view
 par_run w_episode_cnt_view
@@ -775,6 +838,7 @@ par_run w_novel_alarm_anon
 par_run w_novel_like_anon
 par_run w_novel_curation_writer_other
 par_run w_novel_curation_epi_list
+par_run w_emoticon_openstore_img_to_grp
 par_run w_emoticon_openstore_writer
 par_run w_user_get_member2
 par_run w_user_get_member_view
@@ -793,6 +857,7 @@ par_run w_novel_get_review_list
 par_run w_member_plus_event_list
 par_run w_emoticon_get_user_group_anon
 par_run w_emoticon_get_user_emoticon_anon
+par_run w_emoticon_get_user_group_sort_anon
 par_end
 
 # ═══════════════════════════════════════════════════════════════

@@ -1881,6 +1881,66 @@ paths:
                 errmsg: ""
                 emoticon_group: "1455"
                 button_show: true
+    post:
+      tags: [이모티콘]
+      summary: 이미지 URL로 이모티콘/스탬프 그룹 조회
+      description: |
+        이모티콘 이미지 URL을 전달하면 해당 이미지가 속한 이모티콘 그룹 또는 스탬프 정보를
+        반환합니다 (`mode=getImgtoGrpEmt`).
+
+        응답은 `"OK|<JSON>"` 형식의 파이프 구분 문자열입니다.
+        JSON 배열 요소는 이모티콘 그룹이면 `emoticon_group_name`/`emoticon_group` 필드를,
+        스탬프이면 `stamp_name`/`idx` 필드를 포함합니다.
+      operationId: getImgtoGrpEmt
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [mode, img]
+              properties:
+                mode:
+                  type: string
+                  enum: [getImgtoGrpEmt]
+                  example: "getImgtoGrpEmt"
+                img:
+                  type: string
+                  description: |
+                    이모티콘 이미지의 URL (`<img>` 태그의 `src` 속성값).
+
+                    확인된 예시:
+                    - 그룹 1700 (댓글창의 천재 마법사):
+                      `https://images.novelpia.com/imagebox/77/776dd92168dde5a663e265c80ef165ce_111886.png`
+                    - 그룹 126 (악마? 앙마! 메타짱):
+                      `https://image.novelpia.com/img/emoticon/i258rd1u0s/01.png`
+                  example: "https://images.novelpia.com/imagebox/77/776dd92168dde5a663e265c80ef165ce_111886.png"
+      responses:
+        "200":
+          description: |
+            파이프 구분 응답. 성공 시 `OK|<JSON>`, 실패 시 오류 메시지.
+
+            JSON은 항목 배열이며 각 항목은 다음 두 형태 중 하나입니다:
+            - **이모티콘 그룹**: `emoticon_group_name`, `emoticon_group`
+            - **스탬프**: `stamp_name`, `idx`
+          content:
+            text/plain:
+              schema:
+                type: string
+                description: "`OK|<JSON 배열>` 또는 오류 문자열"
+              examples:
+                emoticon_group_1700:
+                  summary: "이모티콘 그룹 1700 — 댓글창의 천재 마법사"
+                  value: 'OK|[{"emoticon_group_name":"댓글창의 천재 마법사","emoticon_group":"1700"}]'
+                emoticon_group_126:
+                  summary: "이모티콘 그룹 126 — 악마? 앙마! 메타짱"
+                  value: 'OK|[{"emoticon_group_name":"악마? 앙마! 메타짱","emoticon_group":"126"}]'
+                stamp:
+                  summary: 스탬프 결과 (참고용)
+                  value: 'OK|[{"stamp_name":"응원 스탬프","idx":"42"}]'
+                error:
+                  summary: 오류
+                  value: "해당 이모티콘을 찾을 수 없습니다."
 
   /proc/emoticon_proc:
     get:
@@ -1892,6 +1952,8 @@ paths:
 
         - `mode=get_user_emoticon_group`: 보유 이모티콘 **그룹** 목록.
           인증 쿠키(LOGINKEY) 없이도 HTTP `status:200`을 반환하지만 `data`는 빈 배열입니다.
+          선택적 `target=sort` 파라미터를 추가하면 노벨티콘 순서/표시 관리 화면용 변형 응답이 되며,
+          각 항목에 표시 여부 플래그 `is_hide`(1=숨김, 0=노출)가 포함됩니다.
         - `mode=get_user_emoticon`: 특정 그룹(`emoticon_group_no`) 내 보유 이모티콘 목록.
           비로그인 시 `status:401`("로그인이 필요합니다.")을 반환합니다.
           `data`가 **두 형태로 다형적(polymorphic)**입니다 — 보통은 이모티콘 객체의 배열이지만,
@@ -1921,6 +1983,16 @@ paths:
             type: integer
             minimum: 1
           example: 174
+        - name: target
+          in: query
+          required: false
+          description: |
+            `mode=get_user_emoticon_group`일 때만 사용. `sort`로 지정하면
+            노벨티콘 순서/표시 관리 화면용 응답이 되며 각 항목에 `is_hide` 플래그가 포함됩니다.
+          schema:
+            type: string
+            enum: [sort]
+          example: "sort"
       security:
         - cookieAuth: []
       responses:
@@ -2061,6 +2133,12 @@ paths:
                           type: ["string", "null"]
                           description: 멤버십 트라이얼 종료 일시
                           example: null
+                        is_hide:
+                          type: integer
+                          description: |
+                            그룹 숨김 여부 (1=댓글 UI에서 숨김, 0=노출).
+                            `target=sort` 변형 응답에서만 포함됩니다.
+                          example: 0
               example:
                 status: 200
                 code: ""
