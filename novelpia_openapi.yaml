@@ -407,21 +407,20 @@ components:
                 example: "getNewHotList"
               period:
                 type: string
-                enum: [today, weekly, month]
+                enum: [weekly, realtime]
                 description: |
                   집계 기간
-                  - `today`: 일간
                   - `weekly`: 주간
-                  - `month`: 월간
+                  - `realtime`: 실시간
                 example: "weekly"
               target:
                 type: string
-                enum: [complete, ongoing, all]
+                enum: [complete, view, like]
                 description: |
-                  대상 소설 상태
+                  정렬 기준 / 대상 필터
                   - `complete`: 완결작
-                  - `ongoing`: 진행작
-                  - `all`: 전체
+                  - `view`: 조회순
+                  - `like`: 추천순
                 example: "complete"
               genre:
                 type: [string, "null"]
