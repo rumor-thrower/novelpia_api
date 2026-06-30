@@ -71,6 +71,33 @@ components:
   # ── 스키마 ──────────────────────────────────────────────
   schemas:
 
+    UserEmoticonItem:
+      type: object
+      description: |
+        `/proc/emoticon_proc?mode=get_user_emoticon` 응답의 그룹 내 보유 이모티콘 항목.
+        (그룹 목록 조회 `get_user_emoticon_group`의 항목과는 필드 구성이 다릅니다.)
+      properties:
+        idx:
+          type: integer
+          description: 이모티콘 항목 고유 번호
+          example: 12068
+        is_use:
+          type: integer
+          description: 사용 가능 여부 (1=사용 가능)
+          example: 1
+        is_fav:
+          type: integer
+          description: 즐겨찾기 여부 (1=즐겨찾기)
+          example: 0
+        state:
+          type: integer
+          description: 이모티콘 상태 (그룹 목록의 state와 동일 의미)
+          example: 8
+        emoticon_url:
+          type: string
+          description: 이모티콘 이미지 URL (프로토콜 상대 경로)
+          example: "//images.novelpia.com/img/emoticon/174/12068.png"
+
     BaseResponse:
       type: object
       description: 모든 `/proc/` JSON 응답의 공통 필드
@@ -1858,12 +1885,25 @@ paths:
   /proc/emoticon_proc:
     get:
       tags: [이모티콘]
-      summary: 사용자 이모티콘 그룹 목록 조회
+      summary: 사용자 이모티콘 조회 (그룹 목록 / 그룹 내 이모티콘)
       description: |
-        로그인한 사용자가 보유한 이모티콘 그룹 목록을 반환합니다.
-        `mode=get_user_emoticon_group` 모드만 확인됐습니다.
-        인증 쿠키(LOGINKEY) 없이도 HTTP 200을 반환하지만 빈 배열이 됩니다.
-      operationId: getUserEmoticonGroup
+        댓글 작성 UI에서 사용하는 사용자 이모티콘 조회 엔드포인트입니다.
+        `mode` 값에 따라 두 가지 조회를 수행합니다.
+
+        - `mode=get_user_emoticon_group`: 보유 이모티콘 **그룹** 목록.
+          인증 쿠키(LOGINKEY) 없이도 HTTP `status:200`을 반환하지만 `data`는 빈 배열입니다.
+        - `mode=get_user_emoticon`: 특정 그룹(`emoticon_group_no`) 내 보유 이모티콘 목록.
+          비로그인 시 `status:401`("로그인이 필요합니다.")을 반환합니다.
+          `data`가 **두 형태로 다형적(polymorphic)**입니다 — 보통은 이모티콘 객체의 배열이지만,
+          한정 노벨티콘 무료 사용 기간이 만료된 경우 `is_buy_emoticon` 필드를 가진 단일 객체가 옵니다.
+
+        주의: 두 모드 모두 HTTP 상태는 항상 200이며, 실제 결과/오류는 본문의 `status` 필드로 구분합니다.
+
+        ⚠️ 개인정보: `get_user_emoticon_group` 응답의 각 항목은 클라이언트 UI가 실제로 사용하지 않는
+        필드(`novel_owner`, `mem_no`, `emoticon_memo`, `coin`, `regdate` 등)까지 과다 전송합니다.
+        특히 `novel_owner`는 이메일 가입 작가의 **원본 이메일 주소를 평문으로 노출**합니다
+        (확인된 클라이언트 스크립트는 `emoticon_group`·`emoticon_url`만 사용).
+      operationId: getUserEmoticon
       parameters:
         - name: mode
           in: query
@@ -1871,8 +1911,16 @@ paths:
           description: 조회 모드
           schema:
             type: string
-            enum: [get_user_emoticon_group]
+            enum: [get_user_emoticon_group, get_user_emoticon]
           example: "get_user_emoticon_group"
+        - name: emoticon_group_no
+          in: query
+          required: false
+          description: "이모티콘 그룹 번호 (`mode=get_user_emoticon`일 때 필수)"
+          schema:
+            type: integer
+            minimum: 1
+          example: 174
       security:
         - cookieAuth: []
       responses:
@@ -1913,11 +1961,17 @@ paths:
                           example: 2
                         mem_no:
                           type: integer
-                          description: 작가 회원 번호 (노벨피아 공식 이모티콘은 0)
+                          description: |
+                            작가 회원 번호 (노벨피아 공식 이모티콘은 0).
+                            ⚠️ 회원 번호 열거(enumeration)가 가능한 식별자이며 UI에서 사용되지 않습니다.
                           example: 3763940
                         novel_owner:
                           type: string
-                          description: 작가 소셜 계정 식별자 (공식 이모티콘은 "노벨피아")
+                          description: |
+                            작가 계정 식별자. 소셜 로그인은 `gg:`(Google)·`nv:`(Naver) 접두사 식별자로,
+                            공식 이모티콘은 "노벨피아"로 표기됩니다.
+                            ⚠️ **개인정보 노출**: 이메일 가입 작가의 경우 원본 이메일 주소가 평문으로 노출됩니다
+                            (예: `zzz00713@naver.com`). UI에서 사용되지 않는 필드입니다.
                           example: "gg:110185598566906369508"
                         novel_no:
                           type: integer
@@ -2064,6 +2118,24 @@ paths:
                     flag_trial: null
                     trial_member_start_dt: null
                     trial_member_end_dt: null
+          # mode=get_user_emoticon 응답 형태(다형적):
+          #
+          # (1) 일반 — 그룹 내 보유 이모티콘 배열:
+          #   {"status":200,"code":"","errmsg":null,
+          #    "data":[{"idx":12068,"is_use":1,"is_fav":0,"state":8,
+          #             "emoticon_url":"//images.novelpia.com/img/emoticon/174/12068.png"}, ...]}
+          #
+          # (2) 한정 노벨티콘 무료 사용 기간 만료 — is_buy_emoticon 필드를 가진 단일 객체:
+          #   {"status":200,"code":"","errmsg":null,
+          #    "data":{"is_buy_emoticon":1,"emoticon_group":174,
+          #            "emoticon_group_name":"...","emoticon_url":"..."}}
+          #   (is_buy_emoticon=1 → "구매하기" 버튼, 그 외 → "다른 이모티콘 보기")
+          #
+          # mode=get_user_emoticon 을 비로그인으로 호출하면 HTTP 200이지만
+          # 본문 status는 401이 됩니다:
+          #   {"status":401,"code":"","errmsg":"로그인이 필요합니다."}
+          #
+          # 그룹 내 이모티콘 항목 스키마는 #/components/schemas/UserEmoticonItem 참조.
 
   # ══════════════════════════════════════════════
   # 소설 목록 페이지

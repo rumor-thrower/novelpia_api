@@ -746,6 +746,23 @@ assert isinstance(d.get('data'), list), 'data 필드가 배열이 아님'
     fi
 }
 
+# 2-26. GET /proc/emoticon_proc?mode=get_user_emoticon (비로그인: 본문 status=401)
+# 그룹 목록(get_user_emoticon_group)과 달리 비로그인 시 빈 배열이 아닌 401을 반환한다.
+w_emoticon_get_user_emoticon_anon() {
+    wdo_request "GET /proc/emoticon_proc — get_user_emoticon (비로그인, status=401 기대)" "200" \
+        "${BASE_URL}/proc/emoticon_proc?mode=get_user_emoticon&emoticon_group_no=14"
+    if echo "$W_BODY" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+assert d.get('status') in (401, '401'), 'status != 401'
+" 2>/dev/null; then
+        info "비로그인 응답 정확: status=401 (로그인이 필요합니다.)"
+    else
+        wfail "GET /proc/emoticon_proc — get_user_emoticon: 비로그인 status=401 미확인"
+        echo "       응답: ${W_BODY:0:200}"
+    fi
+}
+
 par_begin
 par_run w_episode_count_view
 par_run w_episode_cnt_view
@@ -775,6 +792,7 @@ par_run w_alarm_get_cnt_anon
 par_run w_novel_get_review_list
 par_run w_member_plus_event_list
 par_run w_emoticon_get_user_group_anon
+par_run w_emoticon_get_user_emoticon_anon
 par_end
 
 # ═══════════════════════════════════════════════════════════════
