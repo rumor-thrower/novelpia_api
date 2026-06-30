@@ -16,6 +16,7 @@
 #   PAID_EP_CODE  - 유료 회차 번호 (기본값: 33296)
 #   MEMBER_NO    - 차단 테스트용 회원 번호 (member_block 전용)
 #   PROFILE_MEM_NO - 프로필 조회 테스트용 회원 번호 (get_member2 등, 기본값: 4169856)
+#   UNBLOCKED_MEM_NO - 비차단 확인용 회원 번호 (get_user_block_chk, 기본값: 17)
 #   VERBOSE      - 1로 설정 시 응답 본문 출력
 #   MAX_JOBS     - 공개 GET 테스트(섹션 1·2)의 최대 동시 실행 수 (기본값: 6, 1이면 순차)
 
@@ -28,6 +29,7 @@ EP_CODE="${EP_CODE:-1134}"
 PAID_EP_CODE="${PAID_EP_CODE:-33296}"
 MEMBER_NO="${MEMBER_NO:-}"
 PROFILE_MEM_NO="${PROFILE_MEM_NO:-4169856}"
+UNBLOCKED_MEM_NO="${UNBLOCKED_MEM_NO:-17}"
 VERBOSE="${VERBOSE:-0}"
 MAX_JOBS="${MAX_JOBS:-6}"
 
@@ -751,7 +753,7 @@ if [[ -z "${LOGINKEY:-}" ]]; then
     skip "POST /proc/alarm — getAlarmCnt (로그인)"
     skip "POST /proc/user — get_member_favorite_novel"
     skip "POST /proc/user — get_user_block_chk (mem_no=${PROFILE_MEM_NO})"
-    skip "POST /proc/user — get_user_block_chk (mem_no=17, 비차단 기대)"
+    skip "POST /proc/user — get_user_block_chk (mem_no=${UNBLOCKED_MEM_NO}, 비차단 기대)"
     skip "POST /proc/novel_alarm — 로그인 상태 토글"
     skip "POST /proc/novel_like — 로그인 상태 토글 (CSRF 필요)"
     skip "POST /proc/board_option — vote_novel (CSRF 필요)"
@@ -776,7 +778,7 @@ else
         skip "POST /proc/alarm — getAlarmCnt (로그인)"
         skip "POST /proc/user — get_member_favorite_novel"
         skip "POST /proc/user — get_user_block_chk (mem_no=${PROFILE_MEM_NO})"
-        skip "POST /proc/user — get_user_block_chk (mem_no=17, 비차단 기대)"
+        skip "POST /proc/user — get_user_block_chk (mem_no=${UNBLOCKED_MEM_NO}, 비차단 기대)"
         skip "POST /proc/viewer_data — 유료 회차 (로그인)"
         skip "POST /proc/novel_alarm — 로그인 상태 토글"
         skip "POST /proc/novel_like — 로그인 상태 토글 (CSRF 필요)"
@@ -826,12 +828,12 @@ assert d.get('status') in ('200', 200), 'status != 200'
         fail "POST /proc/user — get_user_block_chk: JSON 파싱 실패"
     fi
 
-    # 차단 여부 확인 — 비차단 대상 (mem_no=17)
-    do_request "POST /proc/user — get_user_block_chk (mem_no=17, 비차단 기대)" "200" \
+    # 차단 여부 확인 — 비차단 대상 (UNBLOCKED_MEM_NO)
+    do_request "POST /proc/user — get_user_block_chk (mem_no=${UNBLOCKED_MEM_NO}, 비차단 기대)" "200" \
         -X POST \
         -H "Content-Type: application/x-www-form-urlencoded" \
         -H "$COOKIE_HEADER" \
-        -d "mode=get_user_block_chk&mem_no=17" \
+        -d "mode=get_user_block_chk&mem_no=${UNBLOCKED_MEM_NO}" \
         "${BASE_URL}/proc/user"
     if echo "$BODY" | python3 -c "
 import sys, json
@@ -839,12 +841,12 @@ d = json.load(sys.stdin)
 assert d.get('status') in ('200', 200), 'status != 200'
 " 2>/dev/null; then
         IS_BLOCKED=$(echo "$BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); print('차단됨' if d.get('result') else '차단 안 됨')" 2>/dev/null || echo "?")
-        info "차단 상태 (mem_no=17): ${IS_BLOCKED}"
+        info "차단 상태 (mem_no=${UNBLOCKED_MEM_NO}): ${IS_BLOCKED}"
         if [ "$IS_BLOCKED" = "차단됨" ]; then
-            warn "POST /proc/user — get_user_block_chk: mem_no=17이 차단됨 (예상: 비차단)"
+            warn "POST /proc/user — get_user_block_chk: mem_no=${UNBLOCKED_MEM_NO}이 차단됨 (예상: 비차단)"
         fi
     else
-        fail "POST /proc/user — get_user_block_chk (mem_no=17): JSON 파싱 실패"
+        fail "POST /proc/user — get_user_block_chk (mem_no=${UNBLOCKED_MEM_NO}): JSON 파싱 실패"
     fi
 
     # 선호작 목록
