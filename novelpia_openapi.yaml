@@ -1,0 +1,2230 @@
+openapi: 3.1.0
+
+info:
+  title: 노벨피아 비공식 API
+  description: |
+    노벨피아(novelpia.com) 웹소설 플랫폼의 비공식 API 명세입니다.
+
+    공식 API 문서가 아니며, 공개된 웹 인터페이스의 역공학(소설 스크래퍼 PNWC·NWC·WNC 시리즈,
+    유저스크립트 betternovelpia)을 통해 작성되었습니다.
+
+    ## 인증
+    로그인이 필요한 엔드포인트는 `LOGINKEY` 쿠키를 사용합니다.
+    쿠키 값은 `<hex_a>_<hex_b>` 형태의 문자열입니다.
+
+    CSRF 보호가 적용된 엔드포인트는 페이지 내 `#csrf` 요소의 값 또는
+    `alarm_btn` JavaScript 함수에 포함된 `csrf` 값을 페이로드에 포함해야 합니다.
+
+    ## 주의사항
+    - `robots.txt`에 따라 `/proc/`, `/json/`, `/api/`, `/error/`, `/viewer/`, `/comic_viewer/`
+      경로는 일반 검색 엔진 봇(Googlebot·Yeti·Daum 등 명시된 봇 제외)에 대해 Disallow입니다.
+    - 이 API는 변경될 수 있으며 공식적으로 지원되지 않습니다.
+    - 서버 부하 방지를 위해 요청 간 적절한 지연(1~3초)을 권장합니다.
+  version: "0.1.0"
+  contact:
+    name: 노벨피아
+    url: https://novelpia.com
+
+servers:
+  - url: https://novelpia.com
+    description: 노벨피아 한국 서버
+
+tags:
+  - name: 페이지 (HTML)
+    description: 브라우저에서 직접 렌더링되는 HTML 페이지 엔드포인트
+  - name: 소설
+    description: 소설 정보·목록 관련 `/proc/` 엔드포인트
+  - name: 회차
+    description: 회차 목록·본문 관련 `/proc/` 엔드포인트
+  - name: 사용자
+    description: 회원 정보·행동(선호·알람·차단) 관련 `/proc/` 엔드포인트
+  - name: 소설 목록
+    description: 소설 목록·랭킹·검색 HTML 페이지 (`/freestory`, `/plus`, `/top100`, `/search`)
+  - name: 사이트 공통
+    description: 로그인·회원가입·공지·상점·이벤트 등 공통 HTML 페이지
+  - name: 아레나
+    description: 커뮤니티 게시판(아레나) HTML 페이지 (`/arena`)
+
+# ─────────────────────────────────────────────────────────────
+# 컴포넌트
+# ─────────────────────────────────────────────────────────────
+components:
+
+  # ── 보안 스킴 ─────────────────────────────────────────────
+  securitySchemes:
+    loginKeyCookie:
+      type: apiKey
+      in: cookie
+      name: LOGINKEY
+      description: |
+        로그인 세션 키. 형식: `<32자리 hex>_<32자리 hex>`
+        예시: `1893a24e1af23c4aa4a792a51ee4159c_0dc0e2e76df7a0d6b77358ed762968ab`
+
+    csrfToken:
+      type: apiKey
+      in: cookie
+      name: csrf
+      description: |
+        CSRF 방어 토큰. 페이지 DOM의 `#csrf` 요소 value 또는
+        `alarm_btn` JS 함수 내 `"csrf": "..."` 값에서 추출합니다.
+
+  # ── 스키마 ──────────────────────────────────────────────
+  schemas:
+
+    BaseResponse:
+      type: object
+      description: 모든 `/proc/` JSON 응답의 공통 필드
+      properties:
+        status:
+          description: HTTP 상태 코드 (문자열 또는 정수)
+          oneOf:
+            - type: string
+              example: "200"
+            - type: integer
+              example: 200
+        errmsg:
+          type: string
+          description: 오류 메시지. 정상이면 빈 문자열.
+          example: ""
+      required:
+        - status
+        - errmsg
+
+    Novel:
+      type: object
+      description: 노벨피아 소설(작품) 정보
+      properties:
+        novel_no:
+          type: integer
+          minimum: 1
+          description: 소설 고유 번호(ID)
+          example: 1
+        novel_name:
+          type: string
+          description: 소설 제목
+          example: "마녀의 도시"
+        novel_story:
+          type: string
+          description: 줄거리(작품 소개)
+          example: "마녀가 지배하는 도시에서..."
+        writer_nick:
+          type: [string, "null"]
+          description: 작가 필명
+          example: "작가닉네임"
+        writer_original:
+          type: [string, "null"]
+          description: 원작자 (번역작·2차 창작의 경우)
+          example: ""
+        mem_no:
+          type: integer
+          minimum: 1
+          description: 작가 회원 번호
+          example: 28450
+        main_genre:
+          type: integer
+          minimum: 0
+          maximum: 14
+          description: |
+            기본 장르 번호
+            - 0: 하렘
+            - 1: 판타지
+            - 2: 무협
+            - 3: 현대
+            - 4: (불명)
+            - 5: 고수위
+            - 6: 로맨스
+            - 7: 대체역사
+            - 8: 스포츠
+            - 9: SF
+            - 10: 기타
+            - 11: 패러디
+            - 12: 현대 판타지
+            - 13: 라이트노벨
+            - 14: 공포
+          example: 1
+        novel_genre:
+          type: string
+          description: 세부 장르 목록 (JSON 배열을 직렬화한 문자열)
+          example: '["판타지","라이트노벨","일상","로맨스"]'
+        novel_type:
+          type: integer
+          enum: [1, 2]
+          description: |
+            소설 유형
+            - 1: PLUS (유료)
+            - 2: 자유 연재 (무료)
+          example: 1
+        novel_age:
+          type: integer
+          minimum: 0
+          description: |
+            최소 열람 연령
+            - 0: 전체 이용가
+            - 15: 15세 이상
+            - 19: 성인(19세 이상)
+          example: 0
+        novel_live:
+          type: integer
+          enum: [0, 1, 2]
+          description: |
+            연재 상태 코드 (`is_complete`, `is_del`과 조합하여 최종 상태 결정)
+            - 0: 연재 중
+            - 1: 연재 지연
+            - 2: 연재 중단
+          example: 0
+        is_del:
+          type: integer
+          enum: [0, 1]
+          description: 삭제 여부 (1이면 삭제됨)
+          example: 0
+        is_complete:
+          type: integer
+          enum: [0, 1]
+          description: 완결 여부 (1이면 완결)
+          example: 0
+        is_monopoly:
+          type: integer
+          enum: [0, 1]
+          description: 플랫폼 독점 여부
+          example: 1
+        is_translation:
+          type: integer
+          enum: [0, 1]
+          description: 번역본 여부
+          example: 0
+        flag_translate:
+          type: integer
+          enum: [0, 1]
+          description: 번역본 여부 (한국 서버 필드명, `is_translation`과 동일)
+          example: 0
+        is_secondary_creation:
+          type: integer
+          enum: [0, 1]
+          description: 2차 창작 여부
+          example: 0
+        is_donation_refusal:
+          type: integer
+          enum: [0, 1]
+          description: 후원 거부 여부
+          example: 0
+        is_contest:
+          type: integer
+          minimum: 0
+          description: |
+            수상한 공모전 ID (0이면 해당 없음)
+            - 2: 2021 우주최강 공모전
+            - 4: 2022 노벨피아 천지창조 공모전
+            - 5: 2022 마스터피스 성인웹소설 공모전
+            - 7: 2022 노벨피아 제2회 우주최강공모전
+            - 12: 2023 노벨피아 제3회 우주최강 공모전
+            - 17: 2024 노벨피아 제4회 우주최강 공모전
+          example: 0
+        is_osmu:
+          type: [string, "null"]
+          description: OSMU(One Source Multi Use) 플랫폼 식별자
+          example: "toptoon"
+        isbn:
+          type: [string, "null"]
+          description: 국제 표준 도서 번호 (ISBN-13)
+          example: "9791140400256"
+        local_code:
+          type: [string, "null"]
+          description: 언어/지역 코드
+          example: "KR"
+        reg_date:
+          type: [string, "null"]
+          format: date-time
+          description: 작품 등록 일시
+          example: "2021-01-07T12:00:00"
+        complete_date:
+          type: [string, "null"]
+          format: date-time
+          description: 연재 종료(완결) 일시
+          example: null
+        last_write_date:
+          type: [string, "null"]
+          format: date-time
+          description: 최근(또는 예정) 연재 일시
+          example: "2024-09-13T18:00:00"
+        del_date:
+          type: [string, "null"]
+          format: date-time
+          description: 작품 삭제 일시
+          example: null
+        status_date:
+          type: [string, "null"]
+          format: date-time
+          description: 서버 측 정보 갱신 일시
+          example: "2024-09-13T18:05:00"
+        update_dt:
+          type: [string, "null"]
+          format: date-time
+          description: 소설 갱신 일시
+          example: "2024-09-13T18:00:00"
+        count_view:
+          type: integer
+          minimum: 0
+          description: 조회 수
+          example: 1500000
+        count_good:
+          type: integer
+          minimum: 0
+          description: 추천 수
+          example: 3200
+        count_pick:
+          type: [integer, "null"]
+          minimum: 0
+          description: 인생픽 순위/수
+          example: 242
+        count_like:
+          type: integer
+          minimum: 0
+          description: 선호 수
+          example: 1895
+        count_alarm:
+          type: integer
+          minimum: 0
+          description: 알람 설정 수
+          example: 1896
+        count_book:
+          type: integer
+          minimum: 0
+          description: 총 회차 수
+          example: 150
+
+    EpisodeTextLine:
+      type: object
+      description: 회차 본문의 한 줄
+      properties:
+        text:
+          type: string
+          description: |
+            본문 텍스트 한 줄.
+            빈 줄은 `"&nbsp;"` 값으로 표현됩니다.
+          example: "마녀가 도시를 지배하기 시작했을 때,"
+
+    EpisodeViewCount:
+      type: object
+      description: 특정 회차의 조회수 항목
+      properties:
+        episode_no:
+          type: integer
+          description: 회차 번호 (`ep_code`와 동일)
+          example: 12606
+        count_view:
+          type: string
+          description: 조회수 (쉼표 구분 숫자 문자열)
+          example: "1,057"
+
+    MemberView:
+      type: object
+      description: 회원 공개 프로필 통계 (`get_member_view` 모드 응답 내 `result`)
+      properties:
+        mem_no:
+          type: integer
+          minimum: 1
+          description: 회원 고유 번호
+          example: 300142
+        view_comment:
+          type: ["integer", "null"]
+          description: 댓글 공개 여부 (null 또는 정수, 의미 불명)
+          example: null
+        view_like_novel:
+          type: integer
+          description: 선호작 공개 여부 (0=비공개, 1=공개 추정)
+          example: 0
+        view_like_hash:
+          type: integer
+          description: 선호 해시태그 공개 여부 (0=비공개, 1=공개 추정)
+          example: 0
+        view_sponsor:
+          type: integer
+          description: 후원 공개 여부 (0=비공개, 1=공개 추정)
+          example: 0
+        episode_cnt:
+          type: integer
+          minimum: 0
+          description: 회원이 읽은 전체 회차 수
+          example: 76318
+        comment_cnt:
+          type: integer
+          minimum: 0
+          description: 회원의 댓글 수
+          example: 0
+
+    PipeDelimitedResponse:
+      type: string
+      description: |
+        파이프(`|`)로 구분된 텍스트 응답.
+
+        형식: `{status}|{count}||{extra}`
+
+        - `status`: `on` (설정됨) · `off` (해제됨) · `login` (로그인 필요)
+        - `count`: 설정/해제 후 현재 수치 (정수)
+        - `extra`: 예비 필드 (보통 비어 있거나 `0`)
+      examples:
+        - "on|1896||0"
+        - "off|1895||"
+        - "login|0||"
+
+  # ── 재사용 요청 본문 ────────────────────────────────────────
+  requestBodies:
+
+    GetNewHotListBody:
+      description: 새로운 인기 목록 조회 요청 본문
+      required: true
+      content:
+        multipart/form-data:
+          schema:
+            type: object
+            required: [mode, period, target]
+            properties:
+              mode:
+                type: string
+                enum: [getNewHotList]
+                example: "getNewHotList"
+              period:
+                type: string
+                enum: [today, weekly, month]
+                description: |
+                  집계 기간
+                  - `today`: 일간
+                  - `weekly`: 주간
+                  - `month`: 월간
+                example: "weekly"
+              target:
+                type: string
+                enum: [complete, ongoing, all]
+                description: |
+                  대상 소설 상태
+                  - `complete`: 완결작
+                  - `ongoing`: 진행작
+                  - `all`: 전체
+                example: "complete"
+              genre:
+                type: [string, "null"]
+                description: 한글 장르명 (예: `판타지`, `무협`, `현대`). 공백은 "전체" 의미
+                example: "판타지"
+              main_genre:
+                type: [string, "null"]
+                description: 장르 ID (0~14). `genre` 파라미터 대체 형식. 일반적으로 `genre` 사용 권장
+                example: ""
+              listpage:
+                type: string
+                description: 페이지 번호 (0부터 시작)
+                default: "0"
+                example: "0"
+
+    GetEpisodeCountViewBody:
+      description: 회차 조회수 일괄 조회 요청 본문
+      required: true
+      content:
+        application/x-www-form-urlencoded:
+          schema:
+            type: object
+            required: [cmd, novel_no]
+            properties:
+              cmd:
+                type: string
+                enum: [get_episode_count_view, get_episode_cnt_view]
+                description: |
+                  처리 명령
+                  - `get_episode_count_view`: 신버전
+                  - `get_episode_cnt_view`: 구버전
+                example: "get_episode_count_view"
+              novel_no:
+                type: string
+                description: 소설 번호
+                example: "23"
+            additionalProperties:
+              type: string
+              description: |
+                `episode_arr[N]` 형식의 회차 배열 항목.
+
+                **신버전** (`cmd=get_episode_count_view`):
+                  키 `episode_arr[N]`, 값 `"episode_count_view novel_count_view_{ep_code}"`
+
+                **구버전** (`cmd=get_episode_cnt_view`):
+                  키 `episode_arr[]`, 값 `"episode_cnt_view novel_cnt_view_{ep_code}"`
+
+                한 번에 최대 20개(페이지당 회차 수) 전송 가능합니다.
+          examples:
+            신버전:
+              summary: 신버전 파라미터
+              value:
+                cmd: "get_episode_count_view"
+                novel_no: "23"
+            구버전:
+              summary: 구버전 파라미터
+              value:
+                cmd: "get_episode_cnt_view"
+                novel_no: "23"
+
+    GetMemberViewBody:
+      description: 회원 공개 프로필 통계 조회 요청 본문
+      required: true
+      content:
+        multipart/form-data:
+          schema:
+            type: object
+            required: [mode, mem_no]
+            properties:
+              mode:
+                type: string
+                enum: [get_member_view]
+                example: "get_member_view"
+              mem_no:
+                type: string
+                description: 조회할 회원 번호
+                example: "300142"
+
+    GetFavoriteNovelBody:
+      description: 회원 선호작 목록 조회 요청 본문
+      required: true
+      content:
+        application/x-www-form-urlencoded:
+          schema:
+            type: object
+            required: [mode, mem_no]
+            properties:
+              mode:
+                type: string
+                enum: [get_member_favorite_novel]
+                example: "get_member_favorite_novel"
+              mem_no:
+                type: string
+                description: 조회할 회원 번호
+                example: "12345"
+              "paging[rowCount]":
+                type: string
+                description: 한 번에 가져올 최대 항목 수
+                default: "1000"
+                example: "1000"
+              "paging[curPage]":
+                type: string
+                description: 현재 페이지 (1부터 시작)
+                default: "1"
+                example: "1"
+              "paging[order]":
+                type: string
+                description: 정렬 기준 필드
+                example: "date"
+              "paging[sort][date]":
+                type: string
+                enum: ["0", "1"]
+                description: |
+                  날짜 정렬 방향
+                  - `"0"`: 오름차순
+                  - `"1"`: 내림차순
+                example: "1"
+
+# ─────────────────────────────────────────────────────────────
+# 경로 (Paths)
+# ─────────────────────────────────────────────────────────────
+paths:
+
+  # ══════════════════════════════════════════════
+  # HTML 페이지
+  # ══════════════════════════════════════════════
+
+  /novel/{novel_code}:
+    get:
+      tags: [페이지 (HTML)]
+      summary: 소설 메인 페이지
+      description: |
+        소설의 제목·작가명·줄거리·장르·통계 등이 포함된 HTML 페이지를 반환합니다.
+
+        | 상황 | 모달 메시지 |
+        |------|------------|
+        | 삭제된 소설 | `"삭제된 소설 입니다."` |
+        | 비공개(연습) 작품 | `"잘못된 접근입니다."` |
+        | 잘못된 번호 | `"잘못된 소설 번호 입니다."` |
+
+        위 오류 상황에서도 HTTP 200이 반환됩니다.
+      operationId: getNovelPage
+      parameters:
+        - name: novel_code
+          in: path
+          required: true
+          description: 소설 고유 번호
+          schema:
+            type: integer
+            minimum: 1
+          example: 23
+      responses:
+        "200":
+          description: 소설 페이지 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /viewer/{ep_code}:
+    get:
+      tags: [페이지 (HTML)]
+      summary: 회차 뷰어 페이지 (스크롤 방식)
+      description: |
+        회차 본문을 스크롤 방식으로 표시하는 HTML 페이지입니다.
+        비로그인 상태에서 PLUS 회차 접근 시 구독 안내 팝업이 나타납니다.
+        `robots.txt`에서 `/viewer/` 전체가 봇에 대해 Disallow 처리되어 있습니다.
+      operationId: getViewerPage
+      security:
+        - loginKeyCookie: []
+        - {}
+      parameters:
+        - name: ep_code
+          in: path
+          required: true
+          description: 회차 고유 번호
+          schema:
+            type: integer
+            minimum: 1
+          example: 3790123
+      responses:
+        "200":
+          description: 뷰어 HTML 페이지
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /comic_viewer/{ep_code}:
+    get:
+      tags: [페이지 (HTML)]
+      summary: 회차 뷰어 페이지 (페이지/만화 방식)
+      description: |
+        회차 본문을 페이지 넘김(만화) 방식으로 표시하는 HTML 페이지입니다.
+        `robots.txt`에서 `/comic_viewer/` 전체가 봇에 대해 Disallow 처리되어 있습니다.
+      operationId: getComicViewerPage
+      security:
+        - loginKeyCookie: []
+        - {}
+      parameters:
+        - name: ep_code
+          in: path
+          required: true
+          description: 회차 고유 번호
+          schema:
+            type: integer
+            minimum: 1
+          example: 3790123
+      responses:
+        "200":
+          description: 만화 방식 뷰어 HTML 페이지
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /user/{mem_no}:
+    get:
+      tags: [페이지 (HTML)]
+      summary: 회원 프로필 페이지
+      description: 특정 회원의 공개 프로필 페이지를 반환합니다.
+      operationId: getUserProfilePage
+      parameters:
+        - name: mem_no
+          in: path
+          required: true
+          description: 회원 고유 번호
+          schema:
+            type: integer
+            minimum: 1
+          example: 28450
+      responses:
+        "200":
+          description: 회원 프로필 HTML 페이지
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /mybook:
+    get:
+      tags: [페이지 (HTML)]
+      summary: 내 서재 페이지
+      description: |
+        로그인한 회원의 선호작(좋아요) 목록이 포함된 내 서재 페이지입니다.
+        로그인 쿠키 없이 접근하면 로그인 페이지로 리다이렉트됩니다.
+      operationId: getMyBookPage
+      security:
+        - loginKeyCookie: []
+      responses:
+        "200":
+          description: 내 서재 HTML 페이지
+          content:
+            text/html:
+              schema:
+                type: string
+        "302":
+          description: 비로그인 → 로그인 페이지로 리다이렉트
+
+  /notice/{category}/view_{post_code}/:
+    get:
+      tags: [페이지 (HTML)]
+      summary: 공지사항 페이지
+      operationId: getNoticePage
+      parameters:
+        - name: category
+          in: path
+          required: true
+          description: "카테고리 슬러그 (예: `20`, `all`)"
+          schema:
+            type: string
+          example: "20"
+        - name: post_code
+          in: path
+          required: true
+          description: 게시글 고유 번호
+          schema:
+            type: integer
+            minimum: 1
+          example: 1392
+      responses:
+        "200":
+          description: 공지사항 HTML 페이지
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /faq/{category}/view_{post_code}/:
+    get:
+      tags: [페이지 (HTML)]
+      summary: FAQ 페이지
+      operationId: getFaqPage
+      parameters:
+        - name: category
+          in: path
+          required: true
+          description: "카테고리 슬러그 (예: `all`)"
+          schema:
+            type: string
+          example: "all"
+        - name: post_code
+          in: path
+          required: true
+          description: FAQ 게시글 고유 번호
+          schema:
+            type: integer
+            minimum: 1
+          example: 383218
+      responses:
+        "200":
+          description: FAQ HTML 페이지
+          content:
+            text/html:
+              schema:
+                type: string
+
+  # ══════════════════════════════════════════════
+  # 소설 관련 proc 엔드포인트
+  # ══════════════════════════════════════════════
+
+  /proc/main:
+    post:
+      tags: [소설]
+      summary: 메인 페이지 데이터 처리 (다목적)
+      description: |
+        `mode` 파라미터로 동작을 구분하는 다목적 메인 페이지 처리 엔드포인트입니다.
+
+        | mode | 설명 |
+        |------|------|
+        | `getNewHotList` | 새로운 인기 목록 조회 |
+
+        응답은 인기 소설 목록을 반환합니다 (`result` 필드에 배열 형식).
+      operationId: procMain
+      requestBody:
+        $ref: "#/components/requestBodies/GetNewHotListBody"
+      responses:
+        "200":
+          description: 인기 목록 JSON
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/BaseResponse"
+                  - type: object
+                    properties:
+                      result:
+                        type: array
+                        description: 인기 소설 목록
+                        items:
+                          $ref: "#/components/schemas/Novel"
+              example:
+                status: 200
+                errmsg: ""
+                result:
+                  - novel_no: 23
+                    novel_name: "마녀의 도시"
+                    novel_story: "마녀가 지배하는 도시에서..."
+                    writer_nick: "작가닉네임"
+                    mem_no: 28450
+                    main_genre: 1
+                    novel_genre: '["판타지"]'
+                    novel_type: 1
+                    novel_age: 0
+                    count_view: 1500000
+                    count_good: 3200
+                    count_like: 1895
+
+  /proc/novel:
+    post:
+      tags: [소설]
+      summary: 소설 관련 처리 (다목적)
+      description: |
+        `cmd` 파라미터로 동작을 구분하는 다목적 소설 처리 엔드포인트입니다.
+
+        | cmd | 설명 |
+        |-----|------|
+        | `get_episode_count_view` | 회차 조회수 일괄 조회 (신버전) |
+        | `get_episode_cnt_view` | 회차 조회수 일괄 조회 (구버전) |
+
+        두 cmd 값은 동일한 기능이며 파라미터 명만 다릅니다.
+      operationId: procNovel
+      requestBody:
+        $ref: "#/components/requestBodies/GetEpisodeCountViewBody"
+      responses:
+        "200":
+          description: 회차 조회수 JSON
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/BaseResponse"
+                  - type: object
+                    properties:
+                      list:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/EpisodeViewCount"
+              example:
+                status: 200
+                errmsg: ""
+                list:
+                  - episode_no: 7146
+                    count_view: "1,057"
+                  - episode_no: 7147
+                    count_view: "842"
+
+  /proc/novel_alarm:
+    post:
+      tags: [소설]
+      summary: 소설 알람 설정/해제 토글
+      description: |
+        특정 소설의 새 회차 알람을 설정하거나 해제합니다.
+        이미 설정된 상태이면 해제, 해제된 상태이면 설정됩니다.
+
+        비로그인 시 `login|0||` 응답이 반환됩니다.
+      operationId: toggleNovelAlarm
+      security:
+        - loginKeyCookie: []
+        - {}
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [novel_no]
+              properties:
+                novel_no:
+                  type: string
+                  description: 소설 번호
+                  example: "23"
+      responses:
+        "200":
+          description: 파이프 구분 응답
+          content:
+            text/plain:
+              schema:
+                $ref: "#/components/schemas/PipeDelimitedResponse"
+              example: "on|1896||0"
+
+  /proc/novel_like:
+    post:
+      tags: [소설]
+      summary: 소설 선호작 설정/해제 토글
+      description: |
+        특정 소설을 선호작으로 등록하거나 해제합니다.
+        CSRF 토큰이 필요합니다 (소설 페이지의 `alarm_btn` JS 함수 내 `"csrf"` 값).
+
+        비로그인 시 `login|0||` 응답이 반환됩니다.
+
+        **주의**: 실 서버 테스트 결과, 성공 시 응답 본문이 빈 문자열(`Content-Length: 0`)로
+        반환되는 경우가 관찰됩니다. 파이프 응답 형식과 다를 수 있으며, HTTP 200 여부로 성공을 판단하세요.
+      operationId: toggleNovelLike
+      security:
+        - loginKeyCookie: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [novel_no, csrf_token]
+              properties:
+                novel_no:
+                  type: string
+                  description: 소설 번호
+                  example: "23"
+                csrf_token:
+                  type: string
+                  description: CSRF 방어 토큰
+                  example: "abc123def456"
+      responses:
+        "200":
+          description: |
+            성공 시 빈 본문(`Content-Length: 0`) 또는 파이프 구분 응답.
+            비로그인 시 `login|0||` 반환.
+          content:
+            text/plain:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/PipeDelimitedResponse"
+                  - type: string
+                    maxLength: 0
+                    description: 성공 시 빈 문자열
+              example: ""
+
+  /proc/board_option:
+    post:
+      tags: [소설]
+      summary: 게시판 옵션 처리 (회차 추천/비추천)
+      description: |
+        `option` 파라미터에 따라 게시판 옵션을 처리합니다.
+
+        | option | 설명 |
+        |--------|------|
+        | `vote_novel` | 회차 추천/비추천 토글 |
+
+        CSRF 토큰이 필요합니다.
+        응답이 `on`으로 시작하면 추천 등록, `off`로 시작하면 추천 해제입니다.
+      operationId: procBoardOption
+      security:
+        - loginKeyCookie: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [option, value, csrf]
+              properties:
+                option:
+                  type: string
+                  enum: [vote_novel]
+                  description: 처리 옵션 종류
+                  example: "vote_novel"
+                value:
+                  type: string
+                  description: 대상 회차 번호 (`ep_code`)
+                  example: "3790123"
+                csrf:
+                  type: string
+                  description: CSRF 방어 토큰
+                  example: "abc123def456"
+      responses:
+        "200":
+          description: 파이프 구분 응답
+          content:
+            text/plain:
+              schema:
+                $ref: "#/components/schemas/PipeDelimitedResponse"
+              example: "on|1||"
+
+  # ══════════════════════════════════════════════
+  # 회차 관련 proc 엔드포인트
+  # ══════════════════════════════════════════════
+
+  /proc/episode_list:
+    post:
+      tags: [회차]
+      summary: 회차 목록 조회
+      description: |
+        소설의 회차 목록 HTML 조각을 반환합니다.
+        한 페이지당 20개 회차가 포함됩니다.
+
+        - `sort`: 정렬 방향 (`DOWN` = 첫화부터, `UP` = 최신화부터)
+        - `page`: 0부터 시작 (1페이지 → `0`, 2페이지 → `1`, ...)
+        - 로그인 쿠키 포함 시 PLUS 회차 링크도 포함됩니다.
+
+        응답은 전체 HTML이 아닌 `<table>` 조각입니다.
+        소설 번호는 회차 목록 내 `.page-link` 태그의 `onclick` 속성에서 추출합니다.
+      operationId: getEpisodeList
+      security:
+        - loginKeyCookie: []
+        - {}
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [novel_no]
+              properties:
+                novel_no:
+                  type: string
+                  description: 소설 번호
+                  example: "23"
+                sort:
+                  type: string
+                  enum: [DOWN, UP]
+                  default: DOWN
+                  description: |
+                    정렬 방향
+                    - `DOWN`: 첫화부터 (오름차순)
+                    - `UP`: 최신화부터 (내림차순)
+                  example: "DOWN"
+                page:
+                  type: integer
+                  minimum: 0
+                  default: 0
+                  description: 페이지 번호 (0부터 시작)
+                  example: 0
+      responses:
+        "200":
+          description: 회차 목록 HTML 조각
+          content:
+            text/html:
+              schema:
+                type: string
+              example: |
+                <table class="s_inv">
+                  <tbody>
+                    <tr class="ep_style5" data-episode-no="7146">
+                      <td class="font12" onclick="$('.loads').show();location='/viewer/7146';">
+                        <b>
+                          <span class="b_free s_inv">무료</span>
+                          <i class="icon ion-bookmark" id="bookmark_7146" style="display:none;"></i>
+                          001. 능력 각성
+                        </b>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+
+  /proc/viewer_data/{ep_code}:
+    post:
+      tags: [회차]
+      summary: 회차 본문 데이터 조회
+      description: |
+        특정 회차의 본문 텍스트를 JSON으로 반환합니다.
+
+        **`Referer` 헤더 필수**: `https://novelpia.com/viewer/{ep_code}` 형태의
+        Referer 없이 요청하면 빈 본문(Content-Length: 0)이 반환됩니다.
+
+        PLUS 회차는 `LOGINKEY` 쿠키(구독 계정) 필요합니다.
+        권한 부족 또는 잘못된 번호인 경우 JSON 대신 오류 모달 HTML이 반환됩니다.
+
+        `size` 파라미터는 폰트 크기(pt)로, 실제 본문에는 영향을 주지 않습니다.
+
+        `c` 필드는 AES 암호화된 메타데이터(ct·iv·s 포함)로 추정됩니다.
+      operationId: getViewerData
+      security:
+        - loginKeyCookie: []
+        - {}
+      parameters:
+        - name: ep_code
+          in: path
+          required: true
+          description: 회차 고유 번호
+          schema:
+            type: integer
+            minimum: 1
+          example: 3790123
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                size:
+                  type: integer
+                  default: 14
+                  description: 폰트 크기(pt) — 응답 내용에 영향 없음
+                  example: 14
+      responses:
+        "200":
+          description: |
+            성공 시 회차 본문 JSON, 실패 시 오류 모달 HTML.
+            Content-Type이 항상 `text/html`로 올 수 있으므로
+            JSON 파싱 성공 여부로 성공/실패를 구분합니다.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [s, c]
+                properties:
+                  s:
+                    type: array
+                    description: 본문 줄 목록
+                    items:
+                      $ref: "#/components/schemas/EpisodeTextLine"
+                  c:
+                    type: string
+                    description: |
+                      AES 암호화된 메타데이터 JSON 문자열.
+                      형식: `{"ct":"...","iv":"...","s":"..."}`
+                    example: '{"ct":"abc...","iv":"def...","s":"ghi..."}'
+              example:
+                s:
+                  - text: "마녀가 도시를 지배하기 시작했을 때,"
+                  - text: "&nbsp;"
+                  - text: "아무도 그것을 막지 않았다."
+                c: '{"ct":"abc123","iv":"def456","s":"ghi789"}'
+            text/html:
+              schema:
+                type: string
+                description: |
+                  오류 시 반환되는 알림 모달 HTML.
+                  `#alert_modal` 요소에 오류 메시지가 포함됩니다.
+
+  # ══════════════════════════════════════════════
+  # 사용자 관련 proc 엔드포인트
+  # ══════════════════════════════════════════════
+
+  /proc/user:
+    post:
+      tags: [사용자]
+      summary: 사용자 관련 처리 (다목적)
+      description: |
+        `mode` 파라미터로 동작을 구분하는 다목적 사용자 처리 엔드포인트입니다.
+
+        | mode | 설명 | Content-Type | 인증 필요 |
+        |------|------|--------------|-----------|
+        | `get_member_view` | 회원 공개 프로필 통계 조회 | `multipart/form-data` | 필요 |
+        | `get_member_favorite_novel` | 회원 선호작 목록 조회 | `application/x-www-form-urlencoded` | 선택적 |
+      operationId: procUser
+      security:
+        - loginKeyCookie: []
+        - {}
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              oneOf:
+                - description: get_member_view — 회원 공개 프로필 통계 조회
+                  type: object
+                  required: [mode, mem_no]
+                  properties:
+                    mode:
+                      type: string
+                      enum: [get_member_view]
+                      example: "get_member_view"
+                    mem_no:
+                      type: string
+                      description: 조회할 회원 번호
+                      example: "300142"
+          application/x-www-form-urlencoded:
+            schema:
+              oneOf:
+                - description: get_member_favorite_novel — 회원 선호작 목록 조회
+                  type: object
+                  required: [mode, mem_no]
+                  properties:
+                    mode:
+                      type: string
+                      enum: [get_member_favorite_novel]
+                      example: "get_member_favorite_novel"
+                    mem_no:
+                      type: string
+                      description: 조회할 회원 번호
+                      example: "12345"
+                    "paging[rowCount]":
+                      type: string
+                      description: 한 번에 가져올 최대 항목 수
+                      default: "1000"
+                      example: "1000"
+                    "paging[curPage]":
+                      type: string
+                      description: 현재 페이지 (1부터 시작)
+                      default: "1"
+                      example: "1"
+                    "paging[order]":
+                      type: string
+                      description: 정렬 기준 필드
+                      example: "date"
+                    "paging[sort][date]":
+                      type: string
+                      enum: ["0", "1"]
+                      description: |
+                        날짜 정렬 방향
+                        - `"0"`: 오름차순
+                        - `"1"`: 내림차순
+                      example: "1"
+      responses:
+        "200":
+          description: |
+            모드에 따라 다른 JSON 응답을 반환합니다.
+
+            - `get_member_view`: `result` 에 `MemberView` 객체 포함
+            - `get_member_favorite_novel`: `result` 에 선호작 목록 포함
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - description: get_member_view 응답
+                    allOf:
+                      - $ref: "#/components/schemas/BaseResponse"
+                      - type: object
+                        properties:
+                          result:
+                            $ref: "#/components/schemas/MemberView"
+                  - description: get_member_favorite_novel 응답
+                    allOf:
+                      - $ref: "#/components/schemas/BaseResponse"
+                      - type: object
+                        properties:
+                          result:
+                            type: object
+                            properties:
+                              novel:
+                                type: array
+                                description: 선호작 소설 목록
+                                items:
+                                  $ref: "#/components/schemas/Novel"
+                              allCount:
+                                type: integer
+                                minimum: 0
+                                description: 전체 선호작 수
+                                example: 2
+              example:
+                status: "200"
+                errmsg: ""
+                result:
+                  mem_no: 300142
+
+  /proc/member_block:
+    post:
+      tags: [사용자]
+      summary: 회원 차단/해제 토글
+      description: |
+        특정 회원을 차단하거나 차단을 해제합니다.
+        이미 차단된 경우 해제, 차단하지 않은 경우 차단됩니다.
+
+        주로 뷰어 페이지 댓글에서 사용합니다.
+        CSRF 토큰은 페이지 내 `#csrf` 요소의 `value`를 사용합니다.
+      operationId: toggleMemberBlock
+      security:
+        - loginKeyCookie: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [member_no, csrf]
+              properties:
+                member_no:
+                  type: string
+                  description: 차단할 회원 번호
+                  example: "12345"
+                csrf:
+                  type: string
+                  description: CSRF 방어 토큰 (`#csrf` 요소의 value)
+                  example: "abc123def456"
+      responses:
+        "200":
+          description: 파이프 구분 응답
+          content:
+            text/plain:
+              schema:
+                $ref: "#/components/schemas/PipeDelimitedResponse"
+              example: "on|1||"
+
+  # ══════════════════════════════════════════════
+  # 소설 목록 페이지
+  # ══════════════════════════════════════════════
+
+  /:
+    get:
+      tags: [소설 목록]
+      summary: 홈 페이지
+      description: 노벨피아 메인 홈 페이지. 추천 소설·이벤트·랭킹 등이 표시됩니다.
+      operationId: getHome
+      responses:
+        "200":
+          description: 홈 HTML 페이지
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /freestory:
+    get:
+      tags: [소설 목록]
+      summary: 자유 연재 목록 메인
+      description: |
+        자유 연재(무료) 소설 목록 메인 페이지입니다.
+        하위 경로로 상세 필터링이 가능합니다.
+      operationId: getFreestoryMain
+      responses:
+        "200":
+          description: 자유 연재 목록 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /freestory/{status}/{sort}/{page}/{genre_filter}:
+    get:
+      tags: [소설 목록]
+      summary: 자유 연재 목록 (필터링)
+      description: |
+        자유 연재 소설 목록을 상태·정렬·페이지·장르로 필터링합니다.
+
+        **URL 구조**: `/freestory/{status}/{sort}/{page}/{genre_filter}?main_genre={id}`
+
+        | 파라미터 | 예시 값 |
+        |----------|---------|
+        | status | `all` · `new` · `complete` |
+        | sort | `date` · `view` · `vote` |
+        | page | 1, 2, 3, ... |
+        | genre_filter | `all` · `판타지` · `무협` · `현대` · `로맨스` · `SF` 등 (선택) |
+        | main_genre | 0~14 (장르 번호, 없으면 전체) |
+      operationId: getFreestoryList
+      parameters:
+        - name: status
+          in: path
+          required: true
+          description: |
+            소설 연재 상태 필터
+            - `all`: 전체
+            - `new`: 신작
+            - `complete`: 완결작
+          schema:
+            type: string
+            enum: [all, new, complete]
+          example: "all"
+        - name: sort
+          in: path
+          required: true
+          description: |
+            정렬 기준
+            - `date`: 최신순
+            - `view`: 조회순
+            - `vote`: 추천순
+          schema:
+            type: string
+            enum: [date, view, vote]
+          example: "date"
+        - name: page
+          in: path
+          required: true
+          description: 페이지 번호 (1부터 시작)
+          schema:
+            type: integer
+            minimum: 1
+          example: 1
+        - name: genre_filter
+          in: path
+          required: true
+          description: "장르 슬러그 — URL 인코딩된 한국어(`판타지` 등) 또는 `all`(전체)"
+          schema:
+            type: string
+          example: "all"
+        - name: main_genre
+          in: query
+          required: false
+          description: |
+            장르 번호 필터 (없으면 전체)
+            - 1: 판타지, 2: 무협, 3: 현대, 6: 로맨스, 7: 대체역사
+            - 8: 스포츠, 9: SF, 10: 기타, 11: 패러디
+            - 12: 현대 판타지, 13: 라이트노벨, 14: 공포
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 14
+      responses:
+        "200":
+          description: 자유 연재 목록 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /plus:
+    get:
+      tags: [소설 목록]
+      summary: PLUS 연재 목록 메인
+      description: PLUS(유료) 소설 목록 메인 페이지입니다.
+      operationId: getPlusMain
+      responses:
+        "200":
+          description: PLUS 목록 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /plus/{category}/{sort}/{page}:
+    get:
+      tags: [소설 목록]
+      summary: PLUS 연재 목록 (필터링)
+      description: |
+        PLUS 소설 목록을 카테고리·정렬·페이지·장르로 필터링합니다.
+
+        **URL 구조**: `/plus/{category}/{sort}/{page}/?main_genre={id}`
+
+        | 카테고리 | 설명 |
+        |----------|------|
+        | `all` | 전체 PLUS |
+        | `complete_writer` | 완결 작가 |
+        | `monopoly` | 독점 |
+        | `entry` | 신진 작가 |
+        | `complete` | 완결작 |
+      operationId: getPlusList
+      parameters:
+        - name: category
+          in: path
+          required: true
+          description: PLUS 카테고리
+          schema:
+            type: string
+            enum: [all, complete_writer, monopoly, entry, complete]
+          example: "all"
+        - name: sort
+          in: path
+          required: true
+          description: "정렬 기준 (`date` · `view` · `vote`)"
+          schema:
+            type: string
+            enum: [date, view, vote]
+          example: "date"
+        - name: page
+          in: path
+          required: true
+          description: 페이지 번호 (1부터 시작)
+          schema:
+            type: integer
+            minimum: 1
+          example: 1
+        - name: main_genre
+          in: query
+          required: false
+          description: 장르 번호 필터 (없으면 전체)
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 14
+          example: 1
+      responses:
+        "200":
+          description: PLUS 목록 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /top100:
+    get:
+      tags: [소설 목록]
+      summary: TOP 100 메인
+      description: 조회수·추천수 기준 상위 100개 소설 랭킹 메인 페이지입니다.
+      operationId: getTop100Main
+      responses:
+        "200":
+          description: TOP 100 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /top100/{series_type}/{period}/{sort}/{age_filter}/{status_filter}:
+    get:
+      tags: [소설 목록]
+      summary: TOP 100 (필터링)
+      description: |
+        TOP 100 랭킹을 시리즈 유형·기간·정렬·연령·상태로 필터링합니다.
+
+        **URL 구조**: `/top100/{series_type}/{period}/{sort}/{age_filter}/{status_filter}?main_genre={id}`
+
+        | 파라미터 | 값 |
+        |----------|-----|
+        | series_type | `all` · `plus` · `freestory` · `complete` |
+        | period | `today` · `weekly` · `month` |
+        | sort | `view` · `vote` · `like` · `pick` |
+        | age_filter | `all` · `teen` · `adult` |
+        | status_filter | `all` · `free` · `plus` |
+      operationId: getTop100List
+      parameters:
+        - name: series_type
+          in: path
+          required: true
+          description: 시리즈 유형 필터
+          schema:
+            type: string
+            enum: [all, plus, freestory, complete]
+          example: "all"
+        - name: period
+          in: path
+          required: true
+          description: |
+            집계 기간
+            - `today`: 일간
+            - `weekly`: 주간
+            - `month`: 월간
+          schema:
+            type: string
+            enum: [today, weekly, month]
+          example: "today"
+        - name: sort
+          in: path
+          required: true
+          description: |
+            정렬 기준
+            - `view`: 조회순
+            - `vote`: 추천순
+            - `like`: 선호순
+            - `pick`: 인생픽순
+          schema:
+            type: string
+            enum: [view, vote, like, pick]
+          example: "view"
+        - name: age_filter
+          in: path
+          required: true
+          description: |
+            연령 필터
+            - `all`: 전체
+            - `teen`: 청소년 이용가
+            - `adult`: 성인
+          schema:
+            type: string
+            enum: [all, teen, adult]
+          example: "all"
+        - name: status_filter
+          in: path
+          required: true
+          description: |
+            연재 유형 필터
+            - `all`: 전체
+            - `free`: 자유 연재
+            - `plus`: PLUS 연재
+          schema:
+            type: string
+            enum: [all, free, plus]
+          example: "all"
+        - name: main_genre
+          in: query
+          required: false
+          description: 장르 번호 필터 (없으면 전체)
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 14
+          example: 1
+      responses:
+        "200":
+          description: TOP 100 랭킹 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /top100/rule/today/view:
+    get:
+      tags: [소설 목록]
+      summary: TOP 100 규칙 안내 페이지
+      operationId: getTop100Rule
+      responses:
+        "200":
+          description: TOP 100 규칙 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /search:
+    get:
+      tags: [소설 목록]
+      summary: 소설 검색
+      description: |
+        소설 제목·작가명 등으로 검색하는 페이지입니다.
+        검색어는 쿼리 파라미터로 전달합니다.
+      operationId: searchNovels
+      parameters:
+        - name: keyword
+          in: query
+          required: false
+          description: 검색어
+          schema:
+            type: string
+          example: "마녀"
+      responses:
+        "200":
+          description: 검색 결과 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /novel_collect:
+    get:
+      tags: [소설 목록]
+      summary: 소설 컬렉션
+      description: 편집자 추천 소설 컬렉션 목록 페이지입니다.
+      operationId: getNovelCollect
+      responses:
+        "200":
+          description: 소설 컬렉션 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /publishing/new:
+    get:
+      tags: [소설 목록]
+      summary: 신규 출판 목록
+      description: 최근 출판된 신작 소설 목록 페이지입니다.
+      operationId: getPublishingNew
+      responses:
+        "200":
+          description: 신규 출판 목록 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  # ══════════════════════════════════════════════
+  # 만화 관련 페이지
+  # ══════════════════════════════════════════════
+
+  /comic_main:
+    get:
+      tags: [소설 목록]
+      summary: 만화 메인 페이지
+      description: 노벨피아 웹툰/만화 메인 페이지입니다.
+      operationId: getComicMain
+      responses:
+        "200":
+          description: 만화 메인 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /comic_freestory:
+    get:
+      tags: [소설 목록]
+      summary: 자유 만화 목록
+      description: 자유 연재 웹툰/만화 목록 페이지입니다.
+      operationId: getComicFreestory
+      responses:
+        "200":
+          description: 자유 만화 목록 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /comic_search:
+    get:
+      tags: [소설 목록]
+      summary: 만화 검색
+      operationId: searchComics
+      responses:
+        "200":
+          description: 만화 검색 결과 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /mybook_comicbook_like:
+    get:
+      tags: [소설 목록]
+      summary: 내 만화 서재 (선호작)
+      security:
+        - loginKeyCookie: []
+      operationId: getComicMybook
+      responses:
+        "200":
+          description: 내 만화 서재 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /comic_mylist:
+    get:
+      tags: [소설 목록]
+      summary: 내 만화 목록
+      security:
+        - loginKeyCookie: []
+      operationId: getComicMylist
+      responses:
+        "200":
+          description: 내 만화 목록 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  # ══════════════════════════════════════════════
+  # 사이트 공통 페이지
+  # ══════════════════════════════════════════════
+
+  /alarm:
+    get:
+      tags: [사이트 공통]
+      summary: 알람 목록 페이지
+      description: 로그인한 회원의 새 회차 알람 목록입니다.
+      security:
+        - loginKeyCookie: []
+      operationId: getAlarmList
+      responses:
+        "200":
+          description: 알람 목록 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /user_free_ticket:
+    get:
+      tags: [사이트 공통]
+      summary: 무료 이용권 페이지
+      description: 회원의 무료 이용권 현황 및 사용 내역입니다.
+      security:
+        - loginKeyCookie: []
+      operationId: getUserFreeTicket
+      responses:
+        "200":
+          description: 무료 이용권 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /writer_room:
+    get:
+      tags: [사이트 공통]
+      summary: 작가 공간 (창작실)
+      description: 작가 등록 및 작품 관리를 위한 창작실 페이지입니다.
+      security:
+        - loginKeyCookie: []
+      operationId: getWriterRoom
+      responses:
+        "200":
+          description: 작가 공간 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /page/login:
+    get:
+      tags: [사이트 공통]
+      summary: 로그인 페이지
+      operationId: getLoginPage
+      parameters:
+        - name: redirectrurl
+          in: query
+          required: false
+          description: 로그인 성공 후 리다이렉트할 URL
+          schema:
+            type: string
+          example: "/mybook"
+      responses:
+        "200":
+          description: 로그인 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /page/join:
+    get:
+      tags: [사이트 공통]
+      summary: 회원가입 페이지
+      operationId: getJoinPage
+      responses:
+        "200":
+          description: 회원가입 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /page/id_search_new:
+    get:
+      tags: [사이트 공통]
+      summary: 아이디/비밀번호 찾기
+      operationId: getIdSearchPage
+      responses:
+        "200":
+          description: 아이디 찾기 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /page/terms_of_use:
+    get:
+      tags: [사이트 공통]
+      summary: 이용약관
+      operationId: getTermsOfUse
+      responses:
+        "200":
+          description: 이용약관 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /page/privacy_policy:
+    get:
+      tags: [사이트 공통]
+      summary: 개인정보처리방침
+      operationId: getPrivacyPolicy
+      responses:
+        "200":
+          description: 개인정보처리방침 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /page/youth_policy:
+    get:
+      tags: [사이트 공통]
+      summary: 청소년보호방침
+      operationId: getYouthPolicy
+      responses:
+        "200":
+          description: 청소년보호방침 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /page/partner:
+    get:
+      tags: [사이트 공통]
+      summary: 파트너 안내
+      operationId: getPartnerPage
+      responses:
+        "200":
+          description: 파트너 안내 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /notice:
+    get:
+      tags: [사이트 공통]
+      summary: 공지사항 메인
+      operationId: getNoticeMain
+      responses:
+        "200":
+          description: 공지사항 목록 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /notice/all:
+    get:
+      tags: [사이트 공통]
+      summary: 공지사항 전체 목록
+      operationId: getNoticeAll
+      responses:
+        "200":
+          description: 전체 공지사항 목록 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /notice/{category}:
+    get:
+      tags: [사이트 공통]
+      summary: 공지사항 카테고리 목록
+      description: |
+        카테고리별 공지사항 목록입니다.
+
+        | 카테고리 | 설명 |
+        |----------|------|
+        | `20` | 업데이트 공지 |
+        | `21` | 일반 공지 |
+      operationId: getNoticeByCategory
+      parameters:
+        - name: category
+          in: path
+          required: true
+          description: 공지 카테고리 번호
+          schema:
+            type: string
+          example: "20"
+      responses:
+        "200":
+          description: 카테고리 공지사항 목록 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /faq:
+    get:
+      tags: [사이트 공통]
+      summary: FAQ 메인
+      operationId: getFaqMain
+      responses:
+        "200":
+          description: FAQ 목록 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /qna:
+    get:
+      tags: [사이트 공통]
+      summary: Q&A 문의 페이지
+      operationId: getQnaPage
+      responses:
+        "200":
+          description: Q&A HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /plus_shop:
+    get:
+      tags: [사이트 공통]
+      summary: PLUS 구독 샵
+      description: PLUS 구독권 구매 페이지입니다.
+      operationId: getPlusShop
+      responses:
+        "200":
+          description: PLUS 샵 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /coin_shop:
+    get:
+      tags: [사이트 공통]
+      summary: 코인 샵
+      description: 코인(노벨코인) 구매 페이지입니다.
+      operationId: getCoinShop
+      responses:
+        "200":
+          description: 코인 샵 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /openstore_v2:
+    get:
+      tags: [사이트 공통]
+      summary: 오픈스토어 (v2) 메인
+      description: 소설 관련 굿즈·상품을 판매하는 오픈스토어 메인 페이지입니다.
+      operationId: getOpenStoreMain
+      responses:
+        "200":
+          description: 오픈스토어 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /openstore_v2_tab/{tab}/{sort}/{page}:
+    get:
+      tags: [사이트 공통]
+      summary: 오픈스토어 탭별 목록
+      operationId: getOpenStoreTab
+      parameters:
+        - name: tab
+          in: path
+          required: true
+          description: "탭 종류 (`novel` · `open` · `mileage`)"
+          schema:
+            type: string
+            enum: [novel, open, mileage]
+          example: "novel"
+        - name: sort
+          in: path
+          required: true
+          description: "정렬 기준 (`desc` · `asc`)"
+          schema:
+            type: string
+            enum: [desc, asc]
+          example: "desc"
+        - name: page
+          in: path
+          required: true
+          description: 페이지 번호 (1부터)
+          schema:
+            type: integer
+            minimum: 1
+          example: 1
+      responses:
+        "200":
+          description: 오픈스토어 탭 목록 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /openstore_v2_detail/{item_id}:
+    get:
+      tags: [사이트 공통]
+      summary: 오픈스토어 상품 상세
+      operationId: getOpenStoreDetail
+      parameters:
+        - name: item_id
+          in: path
+          required: true
+          description: 상품 고유 번호
+          schema:
+            type: integer
+            minimum: 1
+          example: 126
+      responses:
+        "200":
+          description: 상품 상세 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /event/{event_slug}:
+    get:
+      tags: [사이트 공통]
+      summary: 이벤트 페이지
+      description: 다양한 이벤트·프로모션 페이지입니다.
+      operationId: getEventPage
+      parameters:
+        - name: event_slug
+          in: path
+          required: true
+          description: 이벤트 슬러그
+          schema:
+            type: string
+          example: "novel_new_challenge"
+      responses:
+        "200":
+          description: 이벤트 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /novelcontribute_guide:
+    get:
+      tags: [사이트 공통]
+      summary: 소설 기고 가이드
+      operationId: getNovelContributeGuide
+      responses:
+        "200":
+          description: 소설 기고 가이드 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /novelnew_guide2:
+    get:
+      tags: [사이트 공통]
+      summary: 신작 가이드 (v2)
+      operationId: getNovelNewGuide
+      responses:
+        "200":
+          description: 신작 가이드 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /novelticon_guide:
+    get:
+      tags: [사이트 공통]
+      summary: 티콘 가이드
+      description: 노벨 이모티콘(티콘) 사용 가이드 페이지입니다.
+      operationId: getNovelTiconGuide
+      responses:
+        "200":
+          description: 티콘 가이드 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /novelplus_guide:
+    get:
+      tags: [사이트 공통]
+      summary: PLUS 가이드
+      operationId: getNovelPlusGuide
+      responses:
+        "200":
+          description: PLUS 가이드 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /novelcoin_guide:
+    get:
+      tags: [사이트 공통]
+      summary: 코인 가이드
+      operationId: getNovelCoinGuide
+      responses:
+        "200":
+          description: 코인 가이드 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  # ══════════════════════════════════════════════
+  # 아레나 (커뮤니티 게시판)
+  # ══════════════════════════════════════════════
+
+  /arena/all:
+    get:
+      tags: [아레나]
+      summary: 아레나 전체 게시글 목록
+      description: |
+        아레나(커뮤니티) 게시판의 전체 게시글 목록 페이지입니다.
+        카테고리 구분 없이 모든 게시글이 표시됩니다.
+      operationId: getArenaAll
+      responses:
+        "200":
+          description: 아레나 전체 목록 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /arena/32:
+    get:
+      tags: [아레나]
+      summary: 아레나 작품 리뷰 게시판
+      description: |
+        아레나 게시판 카테고리 32번 — 작품 리뷰 게시판입니다.
+        작품에 대한 독자 리뷰·감상문이 올라옵니다.
+      operationId: getArenaReview
+      responses:
+        "200":
+          description: 작품 리뷰 게시판 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /arena/33:
+    get:
+      tags: [아레나]
+      summary: 아레나 작품 홍보 게시판
+      description: |
+        아레나 게시판 카테고리 33번 — 작품 홍보 게시판입니다.
+        작가 또는 독자가 작품을 홍보하는 게시글이 올라옵니다.
+      operationId: getArenaPromotion
+      responses:
+        "200":
+          description: 작품 홍보 게시판 HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+# ─────────────────────────────────────────────────────────────
+# 확장 정보 (비고)
+# ─────────────────────────────────────────────────────────────
+x-novelpia-cookies:
+  description: |
+    노벨피아에서 사용되는 주요 쿠키
+
+    | 이름 | 예시 값 | 설명 |
+    |------|---------|------|
+    | `LOGINKEY` | `1893a24e1af23c4aa4a792a51ee4159c_0dc0e2e76df7a0d6b77358ed762968ab` | 로그인 세션 키 |
+    | `USERKEY` | `cf9049ba77ba25f9f2ab60885ef9f087` | 사용자 식별자 |
+    | `NPD{DD}{MM}1` | `NPD15081=meta` | 당일 일반 쿠키 (DD=일, MM=월) |
+    | `NPK{MM}{DD}` | `NPK0811=OObWV0YQ..` | 당일 보조 쿠키 |
+    | `SITE_LANG` | `ko-KR` | 사이트 언어 설정 |
+    | `REF_DATA` | `/novel/1` | 마지막 방문 경로 |
+    | `PRIVATE_MODE` | `error` | 개인 정보 처리 관련 |
+
+x-novelpia-robots:
+  description: |
+    `robots.txt` 요약
+
+    - `User-agent: *` → `Disallow: /` (일반 봇 전체 차단)
+    - 다음 봇은 허용 (단 아래 경로 제외):
+      Googlebot / Yeti / Daum / Daumoa / Ads-Naver / facebookexternalhit
+      - `Disallow: /proc/`
+      - `Disallow: /json/`
+      - `Disallow: /api/`
+      - `Disallow: /error/`
+      - `Disallow: /viewer/`
+      - `Disallow: /comic_viewer/`
+
+x-novelpia-html-selectors:
+  description: |
+    HTML 파싱에 사용되는 주요 CSS 선택자
+
+    **회차 목록 (episode_list 응답)**
+
+    | 선택자 | 대상 |
+    |--------|------|
+    | `table.s_inv` | 회차 목록 테이블 |
+    | `tr.ep_style5` | 회차 행. `data-episode-no` 속성에 ep_code 포함 |
+    | `span.s_inv` | 회차 유형 태그 (무료·성인) |
+    | `.b_free` | 무료 회차 클래스 |
+    | `.b_19` | 성인(19금) 회차 클래스 |
+    | `span.episode_count_view.novel_count_view_{ep_code}` | 회차별 조회수 위젯 |
+    | `i.ion-document-text` | 글자 수 아이콘 |
+    | `i.ion-chatbox-working` | 댓글 수 아이콘 |
+    | `i.ion-thumbsup` | 추천 수 아이콘 |
+    | `.page-link` | 페이지 링크 (소설 번호 추출에 활용) |
+
+    **뷰어 페이지**
+
+    | 선택자 | 대상 |
+    |--------|------|
+    | `#novel_box` | 뷰어 본문 스크롤 컨테이너 |
+    | `#episode_list` | 회차 목록 컨테이너 |
+    | `#comment_load` | 댓글 목록 컨테이너 |
+    | `#csrf` | CSRF 토큰 input 요소 |
+    | `.menu-top-tag` | 화수 표기 태그 (예: `EP.1`) |
+    | `#header_bar` | 상단 헤더 바 |
+    | `#footer_bar` | 하단 푸터 바 |
+    | `#novel_drawing` | 소설 일러스트 영역 |
+    | `#m-sidemenu .sidemenu-support` | 사이드 메뉴 (지원) |
+
+x-novelpia-episode-num-format:
+  description: |
+    회차 화수(num) 표기 형식
+
+    | 표기 | 의미 |
+    |------|------|
+    | `EP.0` | 프롤로그 |
+    | `EP.N` | N화 (1부터 시작) |
+    | `BONUS` | 보너스화 |
+
+    프롤로그는 2022년 5월 16일 이후 신규 등록 불가.
+    에필로그 기능은 2022년 5월 16일부로 삭제.
+
+x-novelpia-date-format:
+  description: |
+    회차 목록 날짜 표기 형식
+
+    | 원문 형식 | 의미 |
+    |-----------|------|
+    | `YY.MM.DD` | 과거 날짜 (예: `21.01.07` → `2021-01-07`) |
+    | `N시간전` | 24시간 이내 게시 (현재 시각 기준 N시간 전) |
+    | `N분전` | 24시간 이내 게시 (현재 시각 기준 N분 전) |
+    | `N시간후` | 예약 회차 (현재 시각 기준 N시간 후 공개) |
+    | `N분후` | 예약 회차 (현재 시각 기준 N분 후 공개) |
+
+    예약 회차는 공개 24시간 전부터 목록에 노출됩니다.
