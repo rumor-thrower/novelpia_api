@@ -15,6 +15,7 @@
 #   EP_CODE       - 무료 회차 번호 (기본값: 1134)
 #   PAID_EP_CODE  - 유료 회차 번호 (기본값: 33296)
 #   MEMBER_NO    - 차단 테스트용 회원 번호 (member_block 전용)
+#   PROFILE_MEM_NO - 프로필 조회 테스트용 회원 번호 (get_member2 등, 기본값: 4169856)
 #   VERBOSE      - 1로 설정 시 응답 본문 출력
 #   MAX_JOBS     - 공개 GET 테스트(섹션 1·2)의 최대 동시 실행 수 (기본값: 6, 1이면 순차)
 
@@ -26,6 +27,7 @@ EPISODE_LIST_NOVEL_NO="${EPISODE_LIST_NOVEL_NO:-31631}"
 EP_CODE="${EP_CODE:-1134}"
 PAID_EP_CODE="${PAID_EP_CODE:-33296}"
 MEMBER_NO="${MEMBER_NO:-}"
+PROFILE_MEM_NO="${PROFILE_MEM_NO:-4169856}"
 VERBOSE="${VERBOSE:-0}"
 MAX_JOBS="${MAX_JOBS:-6}"
 
@@ -474,6 +476,239 @@ for item in d['curation_list']:
     fi
 }
 
+# 2-12. /proc/user — get_member2 (공개)
+w_user_get_member2() {
+    local mem_no="${PROFILE_MEM_NO:-4169856}"
+    wdo_request "POST /proc/user — get_member2 (mem_no=${mem_no})" "200" \
+        -X POST \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        -d "mode=get_member2&mem_no=${mem_no}" \
+        "${BASE_URL}/proc/user"
+    if echo "$W_BODY" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+assert d.get('status') in ('200', 200), 'status != 200'
+assert 'result' in d, 'result 필드 없음'
+" 2>/dev/null; then
+        info "JSON 파싱 성공 — result 필드 존재"
+    else
+        wfail "POST /proc/user — get_member2: JSON 파싱 실패 또는 result 필드 없음"
+        echo "       응답: ${W_BODY:0:200}"
+    fi
+}
+
+# 2-13. /proc/user — get_member_view (공개)
+w_user_get_member_view() {
+    local mem_no="${PROFILE_MEM_NO:-4169856}"
+    wdo_request "POST /proc/user — get_member_view (mem_no=${mem_no})" "200" \
+        -X POST \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        -d "mode=get_member_view&mem_no=${mem_no}" \
+        "${BASE_URL}/proc/user"
+    if echo "$W_BODY" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+assert d.get('status') in ('200', 200), 'status != 200'
+assert 'result' in d, 'result 필드 없음'
+" 2>/dev/null; then
+        info "JSON 파싱 성공 — result 필드 존재"
+    else
+        wfail "POST /proc/user — get_member_view: JSON 파싱 실패"
+        echo "       응답: ${W_BODY:0:200}"
+    fi
+}
+
+# 2-14. /proc/user — get_member_writer_novel (공개)
+w_user_get_member_writer_novel() {
+    local mem_no="${PROFILE_MEM_NO:-4169856}"
+    wdo_request "POST /proc/user — get_member_writer_novel (mem_no=${mem_no})" "200" \
+        -X POST \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        -d "mode=get_member_writer_novel&mem_no=${mem_no}&paging%5BrowCount%5D=5&paging%5BcurPage%5D=1&paging%5Border%5D=date&paging%5Bsort%5D%5Bdate%5D=1" \
+        "${BASE_URL}/proc/user"
+    if echo "$W_BODY" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+assert d.get('status') in ('200', 200), 'status != 200'
+assert 'result' in d, 'result 필드 없음'
+" 2>/dev/null; then
+        info "JSON 파싱 성공 — result 필드 존재"
+    else
+        wfail "POST /proc/user — get_member_writer_novel: JSON 파싱 실패"
+        echo "       응답: ${W_BODY:0:200}"
+    fi
+}
+
+# 2-15. /proc/user — get_member_badge (공개)
+w_user_get_member_badge() {
+    local mem_no="${PROFILE_MEM_NO:-4169856}"
+    wdo_request "POST /proc/user — get_member_badge (mem_no=${mem_no})" "200" \
+        -X POST \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        -d "mode=get_member_badge&mem_no=${mem_no}" \
+        "${BASE_URL}/proc/user"
+    if echo "$W_BODY" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+assert d.get('status') in ('200', 200), 'status != 200'
+" 2>/dev/null; then
+        info "JSON 파싱 성공"
+    else
+        wfail "POST /proc/user — get_member_badge: JSON 파싱 실패"
+        echo "       응답: ${W_BODY:0:200}"
+    fi
+}
+
+# 2-16. /proc/user — get_member_emoticon (공개)
+w_user_get_member_emoticon() {
+    local mem_no="${PROFILE_MEM_NO:-4169856}"
+    wdo_request "POST /proc/user — get_member_emoticon (mem_no=${mem_no})" "200" \
+        -X POST \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        -d "mode=get_member_emoticon&mem_no=${mem_no}" \
+        "${BASE_URL}/proc/user"
+    if echo "$W_BODY" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+assert d.get('status') in ('200', 200), 'status != 200'
+" 2>/dev/null; then
+        info "JSON 파싱 성공"
+    else
+        wfail "POST /proc/user — get_member_emoticon: JSON 파싱 실패"
+        echo "       응답: ${W_BODY:0:200}"
+    fi
+}
+
+# 2-17. /proc/user — get_member_stamp (공개)
+w_user_get_member_stamp() {
+    local mem_no="${PROFILE_MEM_NO:-4169856}"
+    wdo_request "POST /proc/user — get_member_stamp (mem_no=${mem_no})" "200" \
+        -X POST \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        -d "mode=get_member_stamp&mem_no=${mem_no}" \
+        "${BASE_URL}/proc/user"
+    if echo "$W_BODY" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+assert d.get('status') in ('200', 200), 'status != 200'
+" 2>/dev/null; then
+        info "JSON 파싱 성공"
+    else
+        wfail "POST /proc/user — get_member_stamp: JSON 파싱 실패"
+        echo "       응답: ${W_BODY:0:200}"
+    fi
+}
+
+# 2-18. /proc/user — get_member_keep_novel (공개)
+w_user_get_member_keep_novel() {
+    local mem_no="${PROFILE_MEM_NO:-4169856}"
+    wdo_request "POST /proc/user — get_member_keep_novel (mem_no=${mem_no})" "200" \
+        -X POST \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        -d "mode=get_member_keep_novel&mem_no=${mem_no}" \
+        "${BASE_URL}/proc/user"
+    if echo "$W_BODY" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+assert d.get('status') in ('200', 200), 'status != 200'
+" 2>/dev/null; then
+        info "JSON 파싱 성공"
+    else
+        wfail "POST /proc/user — get_member_keep_novel: JSON 파싱 실패"
+        echo "       응답: ${W_BODY:0:200}"
+    fi
+}
+
+# 2-19. /proc/user — get_member_donation (공개)
+w_user_get_member_donation() {
+    local mem_no="${PROFILE_MEM_NO:-4169856}"
+    wdo_request "POST /proc/user — get_member_donation (mem_no=${mem_no})" "200" \
+        -X POST \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        -d "mode=get_member_donation&mem_no=${mem_no}" \
+        "${BASE_URL}/proc/user"
+    if echo "$W_BODY" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+assert d.get('status') in ('200', 200), 'status != 200'
+" 2>/dev/null; then
+        info "JSON 파싱 성공"
+    else
+        wfail "POST /proc/user — get_member_donation: JSON 파싱 실패"
+        echo "       응답: ${W_BODY:0:200}"
+    fi
+}
+
+# 2-20. /proc/user — get_episode_cnt (공개)
+w_user_get_episode_cnt() {
+    local mem_no="${PROFILE_MEM_NO:-4169856}"
+    wdo_request "POST /proc/user — get_episode_cnt (mem_no=${mem_no})" "200" \
+        -X POST \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        -d "mode=get_episode_cnt&mem_no=${mem_no}" \
+        "${BASE_URL}/proc/user"
+    if echo "$W_BODY" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+assert d.get('status') in ('200', 200), 'status != 200'
+" 2>/dev/null; then
+        info "JSON 파싱 성공"
+    else
+        wfail "POST /proc/user — get_episode_cnt: JSON 파싱 실패"
+        echo "       응답: ${W_BODY:0:200}"
+    fi
+}
+
+# 2-21. /proc/user — get_stat_hall_of_fame (공개, cate=emoticon/donation/episode)
+w_user_get_stat_hall_of_fame() {
+    local mem_no="${PROFILE_MEM_NO:-4169856}"
+    local cate="$1"
+    wdo_request "POST /proc/user — get_stat_hall_of_fame (cate=${cate})" "200" \
+        -X POST \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        -d "mode=get_stat_hall_of_fame&mem_no=${mem_no}&cate=${cate}" \
+        "${BASE_URL}/proc/user"
+    if echo "$W_BODY" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+assert d.get('status') in ('200', 200), 'status != 200'
+" 2>/dev/null; then
+        info "JSON 파싱 성공"
+    else
+        wfail "POST /proc/user — get_stat_hall_of_fame (${cate}): JSON 파싱 실패"
+        echo "       응답: ${W_BODY:0:200}"
+    fi
+}
+
+# 2-22. /proc/alarm — getAlarmCnt (비로그인: 0 또는 오류)
+w_alarm_get_cnt_anon() {
+    wdo_request "POST /proc/alarm — getAlarmCnt (비로그인)" "200" \
+        -X POST \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        -d "mode=getAlarmCnt" \
+        "${BASE_URL}/proc/alarm"
+    if echo "$W_BODY" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+assert d.get('status') in ('200', 200), 'status != 200'
+" 2>/dev/null; then
+        info "JSON 파싱 성공"
+    else
+        info "비로그인 응답: ${W_BODY:0:100}"
+    fi
+}
+
+# 2-23. GET /proc/member_plus?cmd=event_list (공개)
+w_member_plus_event_list() {
+    wdo_request "GET /proc/member_plus — event_list" "200" \
+        "${BASE_URL}/proc/member_plus?cmd=event_list"
+    if echo "$W_BODY" | python3 -c "import sys, json; json.load(sys.stdin)" 2>/dev/null; then
+        info "JSON 파싱 성공"
+    else
+        info "응답: ${W_BODY:0:100} (JSON이 아닐 수 있음)"
+    fi
+}
+
 par_begin
 par_run w_episode_count_view
 par_run w_episode_cnt_view
@@ -487,6 +722,20 @@ par_run w_novel_like_anon
 par_run w_novel_curation_writer_other
 par_run w_novel_curation_epi_list
 par_run w_emoticon_openstore_writer
+par_run w_user_get_member2
+par_run w_user_get_member_view
+par_run w_user_get_member_writer_novel
+par_run w_user_get_member_badge
+par_run w_user_get_member_emoticon
+par_run w_user_get_member_stamp
+par_run w_user_get_member_keep_novel
+par_run w_user_get_member_donation
+par_run w_user_get_episode_cnt
+par_run w_user_get_stat_hall_of_fame "emoticon"
+par_run w_user_get_stat_hall_of_fame "donation"
+par_run w_user_get_stat_hall_of_fame "episode"
+par_run w_alarm_get_cnt_anon
+par_run w_member_plus_event_list
 par_end
 
 # ═══════════════════════════════════════════════════════════════
@@ -499,7 +748,9 @@ if [[ -z "${LOGINKEY:-}" ]]; then
     skip "LOGINKEY 미설정 — 섹션 3 전체 생략"
     skip "GET /mybook"
     skip "GET /alarm"
+    skip "POST /proc/alarm — getAlarmCnt (로그인)"
     skip "POST /proc/user — get_member_favorite_novel"
+    skip "POST /proc/user — get_user_block_chk"
     skip "POST /proc/novel_alarm — 로그인 상태 토글"
     skip "POST /proc/novel_like — 로그인 상태 토글 (CSRF 필요)"
     skip "POST /proc/board_option — vote_novel (CSRF 필요)"
@@ -521,7 +772,9 @@ else
         fail "LOGINKEY 무효 — 서버가 비로그인으로 처리함 (섹션 3 인증 테스트 전체 생략)"
         skip "GET /mybook"
         skip "GET /alarm"
+        skip "POST /proc/alarm — getAlarmCnt (로그인)"
         skip "POST /proc/user — get_member_favorite_novel"
+        skip "POST /proc/user — get_user_block_chk"
         skip "POST /proc/viewer_data — 유료 회차 (로그인)"
         skip "POST /proc/novel_alarm — 로그인 상태 토글"
         skip "POST /proc/novel_like — 로그인 상태 토글 (CSRF 필요)"
@@ -533,6 +786,43 @@ else
     get_page "/mybook" "내 서재" -H "$COOKIE_HEADER"
 
     get_page "/alarm" "알람 목록" -H "$COOKIE_HEADER"
+
+    # 알람 카운트 (인증 상태)
+    do_request "POST /proc/alarm — getAlarmCnt (로그인)" "200" \
+        -X POST \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        -H "$COOKIE_HEADER" \
+        -d "mode=getAlarmCnt" \
+        "${BASE_URL}/proc/alarm"
+    if echo "$BODY" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+assert d.get('status') in ('200', 200), 'status != 200'
+" 2>/dev/null; then
+        CNT=$(echo "$BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('result',{}).get('cnt','?'))" 2>/dev/null || echo "?")
+        info "알람 카운트: ${CNT}"
+    else
+        fail "POST /proc/alarm — getAlarmCnt: JSON 파싱 실패"
+    fi
+
+    # 차단 여부 확인 (인증 필요)
+    PROFILE_MEM_NO="${PROFILE_MEM_NO:-4169856}"
+    do_request "POST /proc/user — get_user_block_chk (mem_no=${PROFILE_MEM_NO})" "200" \
+        -X POST \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        -H "$COOKIE_HEADER" \
+        -d "mode=get_user_block_chk&mem_no=${PROFILE_MEM_NO}" \
+        "${BASE_URL}/proc/user"
+    if echo "$BODY" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+assert d.get('status') in ('200', 200), 'status != 200'
+" 2>/dev/null; then
+        IS_BLOCKED=$(echo "$BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); print('차단됨' if d.get('result') else '차단 안 됨')" 2>/dev/null || echo "?")
+        info "차단 상태: ${IS_BLOCKED}"
+    else
+        fail "POST /proc/user — get_user_block_chk: JSON 파싱 실패"
+    fi
 
     # 선호작 목록
     do_request "POST /proc/user — get_member_favorite_novel" "200" \
