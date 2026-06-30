@@ -438,13 +438,15 @@ w_emoticon_openstore_writer() {
     if echo "$W_BODY" | python3 -c "
 import sys, json
 d = json.load(sys.stdin)
-assert 'status' in d, 'status 필드 없음'
+assert d.get('status') in (200, '200'), 'status != 200'
+assert 'emoticon_group' in d, 'emoticon_group 필드 없음'
+assert 'button_show' in d, 'button_show 필드 없음'
 " 2>/dev/null; then
-        local status
-        status=$(echo "$W_BODY" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','?'))" 2>/dev/null || echo "?")
-        info "JSON 파싱 성공 — status=${status}"
+        local group
+        group=$(echo "$W_BODY" | python3 -c "import sys,json; print(json.load(sys.stdin).get('emoticon_group',''))" 2>/dev/null || echo "?")
+        info "JSON 파싱 성공 — emoticon_group=${group}"
     else
-        wfail "GET /proc/emoticon_openstore — JSON 파싱 실패 또는 status 필드 누락"
+        wfail "GET /proc/emoticon_openstore — JSON 파싱 실패 또는 필드 누락"
         echo "       응답: ${W_BODY:0:200}"
     fi
 }

@@ -1392,18 +1392,28 @@ paths:
                     type: integer
                     description: "응답 상태 코드 (200 = 정상)"
                     example: 200
-                  emoticon_list:
-                    type: array
-                    description: 이모티콘 상품 목록 (없으면 빈 배열)
-                    items:
-                      type: object
-                      properties:
-                        item_id:
-                          type: integer
-                          description: 오픈스토어 상품 번호
-                        item_name:
-                          type: string
-                          description: 이모티콘 상품명
+                  code:
+                    type: string
+                    description: 오류 코드 (정상 시 빈 문자열)
+                    example: ""
+                  errmsg:
+                    type: string
+                    description: 오류 메시지 (정상 시 빈 문자열)
+                    example: ""
+                  emoticon_group:
+                    type: string
+                    description: 오픈스토어 이모티콘 그룹 번호 (없으면 빈 문자열)
+                    example: "1455"
+                  button_show:
+                    type: boolean
+                    description: 이모티콘 구매 버튼 표시 여부
+                    example: true
+              example:
+                status: 200
+                code: ""
+                errmsg: ""
+                emoticon_group: "1455"
+                button_show: true
 
   # ══════════════════════════════════════════════
   # 소설 목록 페이지
