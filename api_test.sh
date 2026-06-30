@@ -431,6 +431,24 @@ assert 'list' in won, 'list 필드 없음'
     fi
 }
 
+# 2-11. 이모티콘 오픈스토어 — 작가 이모티콘 조회
+w_emoticon_openstore_writer() {
+    wdo_request "GET /proc/emoticon_openstore — getWriterEmoticon" "200" \
+        "${BASE_URL}/proc/emoticon_openstore?mode=getWriterEmoticon&novel_no=${NOVEL_NO}"
+    if echo "$W_BODY" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+assert 'status' in d, 'status 필드 없음'
+" 2>/dev/null; then
+        local status
+        status=$(echo "$W_BODY" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','?'))" 2>/dev/null || echo "?")
+        info "JSON 파싱 성공 — status=${status}"
+    else
+        wfail "GET /proc/emoticon_openstore — JSON 파싱 실패 또는 status 필드 누락"
+        echo "       응답: ${W_BODY:0:200}"
+    fi
+}
+
 # 2-10. 소설 큐레이션 — 회차 뷰어 장르 기반 추천 목록
 w_novel_curation_epi_list() {
     wdo_request "GET /proc/novel_curation — epi_list_curation (main_genre=3)" "200" \
@@ -466,6 +484,7 @@ par_run w_novel_alarm_anon
 par_run w_novel_like_anon
 par_run w_novel_curation_writer_other
 par_run w_novel_curation_epi_list
+par_run w_emoticon_openstore_writer
 par_end
 
 # ═══════════════════════════════════════════════════════════════

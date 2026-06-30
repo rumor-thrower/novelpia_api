@@ -1355,6 +1355,56 @@ paths:
                 $ref: "#/components/schemas/PipeDelimitedResponse"
               example: "on|1||"
 
+  /proc/emoticon_openstore:
+    get:
+      tags: [소설]
+      summary: 작가 이모티콘 스토어 정보 조회
+      description: |
+        특정 소설의 작가가 오픈스토어에 등록한 이모티콘 상품 정보를 반환합니다.
+        `mode=getWriterEmoticon` 모드만 확인됐습니다.
+      operationId: getWriterEmoticon
+      parameters:
+        - name: mode
+          in: query
+          required: true
+          description: 조회 모드
+          schema:
+            type: string
+            enum: [getWriterEmoticon]
+          example: "getWriterEmoticon"
+        - name: novel_no
+          in: query
+          required: true
+          description: 소설 번호
+          schema:
+            type: integer
+            minimum: 1
+          example: 23
+      responses:
+        "200":
+          description: 작가 이모티콘 스토어 정보 (JSON)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    description: "응답 상태 코드 (200 = 정상)"
+                    example: 200
+                  emoticon_list:
+                    type: array
+                    description: 이모티콘 상품 목록 (없으면 빈 배열)
+                    items:
+                      type: object
+                      properties:
+                        item_id:
+                          type: integer
+                          description: 오픈스토어 상품 번호
+                        item_name:
+                          type: string
+                          description: 이모티콘 상품명
+
   # ══════════════════════════════════════════════
   # 소설 목록 페이지
   # ══════════════════════════════════════════════
