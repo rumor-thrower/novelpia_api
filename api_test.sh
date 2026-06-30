@@ -700,7 +700,23 @@ assert d.get('status') in ('200', 200), 'status != 200'
     fi
 }
 
-# 2-23. GET /proc/member_plus?cmd=event_list (공개)
+# 2-23. GET /proc/novel?cmd=get_novel_review_list (공개)
+w_novel_get_review_list() {
+    wdo_request "GET /proc/novel — get_novel_review_list (novel_no=${NOVEL_NO})" "200" \
+        "${BASE_URL}/proc/novel?cmd=get_novel_review_list&target_novel_no=${NOVEL_NO}"
+    if echo "$W_BODY" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+assert d.get('status') in ('200', 200), 'status != 200'
+assert isinstance(d.get('data'), list), 'data 필드가 배열이 아님'
+" 2>/dev/null; then
+        info "JSON 파싱 성공, data 배열 존재"
+    else
+        wfail "GET /proc/novel — JSON 파싱 실패 또는 data 필드 없음"
+    fi
+}
+
+# 2-24. GET /proc/member_plus?cmd=event_list (공개)
 w_member_plus_event_list() {
     wdo_request "GET /proc/member_plus — event_list" "200" \
         "${BASE_URL}/proc/member_plus?cmd=event_list"
@@ -737,6 +753,7 @@ par_run w_user_get_stat_hall_of_fame "emoticon"
 par_run w_user_get_stat_hall_of_fame "donation"
 par_run w_user_get_stat_hall_of_fame "episode"
 par_run w_alarm_get_cnt_anon
+par_run w_novel_get_review_list
 par_run w_member_plus_event_list
 par_end
 
