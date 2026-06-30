@@ -1855,6 +1855,216 @@ paths:
                 emoticon_group: "1455"
                 button_show: true
 
+  /proc/emoticon_proc:
+    get:
+      tags: [이모티콘]
+      summary: 사용자 이모티콘 그룹 목록 조회
+      description: |
+        로그인한 사용자가 보유한 이모티콘 그룹 목록을 반환합니다.
+        `mode=get_user_emoticon_group` 모드만 확인됐습니다.
+        인증 쿠키(LOGINKEY) 없이도 HTTP 200을 반환하지만 빈 배열이 됩니다.
+      operationId: getUserEmoticonGroup
+      parameters:
+        - name: mode
+          in: query
+          required: true
+          description: 조회 모드
+          schema:
+            type: string
+            enum: [get_user_emoticon_group]
+          example: "get_user_emoticon_group"
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: 사용자 보유 이모티콘 그룹 목록 (JSON)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    description: "응답 상태 코드 (200 = 정상)"
+                    example: 200
+                  code:
+                    type: string
+                    description: 오류 코드 (정상 시 빈 문자열)
+                    example: ""
+                  errmsg:
+                    type: ["string", "null"]
+                    description: 오류 메시지 (정상 시 null)
+                    example: null
+                  data:
+                    type: array
+                    description: 보유 이모티콘 그룹 목록
+                    items:
+                      type: object
+                      properties:
+                        idx:
+                          type: integer
+                          description: 이모티콘 항목 고유 번호
+                          example: 12260
+                        state:
+                          type: integer
+                          description: |
+                            이모티콘 상태.
+                            0=무료, 1=구매 가능, 2=작품 연계 구매, 3=기간 한정(만료), 4=멤버십 전용, 8=노벨피아 공식
+                          example: 2
+                        mem_no:
+                          type: integer
+                          description: 작가 회원 번호 (노벨피아 공식 이모티콘은 0)
+                          example: 3763940
+                        novel_owner:
+                          type: string
+                          description: 작가 소셜 계정 식별자 (공식 이모티콘은 "노벨피아")
+                          example: "gg:110185598566906369508"
+                        novel_no:
+                          type: integer
+                          description: 연계 소설 번호 (공식 이모티콘은 0)
+                          example: 370230
+                        emoticon_group:
+                          type: integer
+                          description: 이모티콘 그룹 번호
+                          example: 1700
+                        emoticon_group_name:
+                          type: string
+                          description: 이모티콘 그룹 이름
+                          example: "댓글창의 천재 마법사"
+                        emoticon_name:
+                          type: ["string", "null"]
+                          description: 개별 이모티콘 이름 (그룹 단위 조회 시 null)
+                          example: null
+                        emoticon_url:
+                          type: string
+                          description: 대표 이모티콘 이미지 URL (프로토콜 상대 경로)
+                          example: "//images.novelpia.com/imagebox/77/776dd92168dde5a663e265c80ef165ce_111886.png"
+                        emoticon_memo:
+                          type: ["string", "null"]
+                          description: 이모티콘 설명 문구 (없으면 null)
+                          example: "댓천마 이모티콘이 출시되었습니다."
+                        coin:
+                          type: integer
+                          description: 구매 가격 (코인). 0=무료
+                          example: 30
+                        novel_url:
+                          type: ["string", "null"]
+                          description: 연계 소설 URL (미사용, 항상 null)
+                          example: null
+                        hit:
+                          type: integer
+                          description: 조회 수 (현재 항상 0)
+                          example: 0
+                        mileage:
+                          type: ["integer", "null"]
+                          description: 마일리지 가격 (기간 한정 이모티콘의 경우 1000, 일반은 null)
+                          example: null
+                        use_date:
+                          type: integer
+                          description: 사용 기간 제한 여부 (0=무제한, 1=기간 한정)
+                          example: 0
+                        startdate:
+                          type: ["string", "null"]
+                          description: 사용 시작 일시 (기간 한정 이모티콘, ISO 8601 없는 로컬시간)
+                          example: null
+                        enddate:
+                          type: ["string", "null"]
+                          description: 사용 종료 일시 (기간 한정 이모티콘)
+                          example: null
+                        opendate:
+                          type: ["string", "null"]
+                          description: 공개 시작 일시
+                          example: null
+                        regdate:
+                          type: string
+                          description: 등록 일시 (YYYY-MM-DD HH:mm:ss)
+                          example: "2026-01-28 14:49:35"
+                        is_trial:
+                          type: ["integer", "null"]
+                          description: 트라이얼 여부
+                          example: null
+                        trial_start_dt:
+                          type: ["string", "null"]
+                          description: 트라이얼 시작 일시
+                          example: null
+                        trial_end_dt:
+                          type: ["string", "null"]
+                          description: 트라이얼 종료 일시
+                          example: null
+                        is_emoticon:
+                          type: ["integer", "null"]
+                          description: 이모티콘 여부 플래그 (1=이모티콘, null=스탬프 등 다른 유형)
+                          example: 1
+                        flag_trial:
+                          type: ["integer", "null"]
+                          description: 트라이얼 플래그
+                          example: null
+                        trial_member_start_dt:
+                          type: ["string", "null"]
+                          description: 멤버십 트라이얼 시작 일시
+                          example: null
+                        trial_member_end_dt:
+                          type: ["string", "null"]
+                          description: 멤버십 트라이얼 종료 일시
+                          example: null
+              example:
+                status: 200
+                code: ""
+                errmsg: null
+                data:
+                  - idx: 12260
+                    state: 2
+                    mem_no: 3763940
+                    novel_owner: "gg:110185598566906369508"
+                    novel_no: 370230
+                    emoticon_group: 1700
+                    emoticon_group_name: "댓글창의 천재 마법사"
+                    emoticon_name: null
+                    emoticon_url: "//images.novelpia.com/imagebox/77/776dd92168dde5a663e265c80ef165ce_111886.png"
+                    emoticon_memo: "댓천마 이모티콘이 출시되었습니다."
+                    coin: 30
+                    novel_url: null
+                    hit: 0
+                    mileage: null
+                    use_date: 0
+                    startdate: null
+                    enddate: null
+                    opendate: null
+                    regdate: "2026-01-28 14:49:35"
+                    is_trial: null
+                    trial_start_dt: null
+                    trial_end_dt: null
+                    is_emoticon: 1
+                    flag_trial: null
+                    trial_member_start_dt: null
+                    trial_member_end_dt: null
+                  - idx: 7765
+                    state: 3
+                    mem_no: 0
+                    novel_owner: "노벨피아"
+                    novel_no: 0
+                    emoticon_group: 126
+                    emoticon_group_name: "악마? 앙마! 메타짱"
+                    emoticon_name: null
+                    emoticon_url: "//image.novelpia.com/img/emoticon/i258rd1u0s/01.png"
+                    emoticon_memo: null
+                    coin: 10
+                    novel_url: null
+                    hit: 0
+                    mileage: 1000
+                    use_date: 1
+                    startdate: "2023-07-11 15:00:00"
+                    enddate: "2023-07-31 15:00:00"
+                    opendate: "2023-07-11 15:00:00"
+                    regdate: "2023-07-07 15:06:06"
+                    is_trial: null
+                    trial_start_dt: null
+                    trial_end_dt: null
+                    is_emoticon: 1
+                    flag_trial: null
+                    trial_member_start_dt: null
+                    trial_member_end_dt: null
+
   # ══════════════════════════════════════════════
   # 소설 목록 페이지
   # ══════════════════════════════════════════════

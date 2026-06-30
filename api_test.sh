@@ -727,6 +727,25 @@ w_member_plus_event_list() {
     fi
 }
 
+# 2-25. GET /proc/emoticon_proc?mode=get_user_emoticon_group (인증 필요, 비로그인 시 빈 배열)
+w_emoticon_get_user_group_anon() {
+    wdo_request "GET /proc/emoticon_proc — get_user_emoticon_group (비로그인)" "200" \
+        "${BASE_URL}/proc/emoticon_proc?mode=get_user_emoticon_group"
+    if echo "$W_BODY" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+assert d.get('status') in (200, '200'), 'status != 200'
+assert isinstance(d.get('data'), list), 'data 필드가 배열이 아님'
+" 2>/dev/null; then
+        local cnt
+        cnt=$(echo "$W_BODY" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['data']))" 2>/dev/null || echo "?")
+        info "JSON 파싱 성공 — data 배열 ${cnt}개 (비로그인이면 0)"
+    else
+        wfail "GET /proc/emoticon_proc — JSON 파싱 실패 또는 data 필드 없음"
+        echo "       응답: ${W_BODY:0:200}"
+    fi
+}
+
 par_begin
 par_run w_episode_count_view
 par_run w_episode_cnt_view
@@ -755,6 +774,7 @@ par_run w_user_get_stat_hall_of_fame "episode"
 par_run w_alarm_get_cnt_anon
 par_run w_novel_get_review_list
 par_run w_member_plus_event_list
+par_run w_emoticon_get_user_group_anon
 par_end
 
 # ═══════════════════════════════════════════════════════════════
@@ -772,6 +792,7 @@ if [[ -z "${LOGINKEY:-}" ]]; then
     skip "POST /proc/user — get_user_block_chk (mem_no=${PROFILE_MEM_NO})"
     skip "POST /proc/user — get_user_block_chk (mem_no=${UNBLOCKED_MEM_NO}, 비차단 기대)"
     skip "POST /proc/viewer_board_comment — get_user_block (mem_no=${PROFILE_MEM_NO})"
+    skip "GET /proc/emoticon_proc — get_user_emoticon_group (로그인)"
     skip "POST /proc/novel_alarm — 로그인 상태 토글"
     skip "POST /proc/novel_like — 로그인 상태 토글 (CSRF 필요)"
     skip "POST /proc/board_option — vote_novel (CSRF 필요)"
@@ -798,6 +819,7 @@ else
         skip "POST /proc/user — get_user_block_chk (mem_no=${PROFILE_MEM_NO})"
         skip "POST /proc/user — get_user_block_chk (mem_no=${UNBLOCKED_MEM_NO}, 비차단 기대)"
         skip "POST /proc/viewer_board_comment — get_user_block (mem_no=${PROFILE_MEM_NO})"
+        skip "GET /proc/emoticon_proc — get_user_emoticon_group (로그인)"
         skip "POST /proc/viewer_data — 유료 회차 (로그인)"
         skip "POST /proc/novel_alarm — 로그인 상태 토글"
         skip "POST /proc/novel_like — 로그인 상태 토글 (CSRF 필요)"
@@ -887,6 +909,23 @@ assert isinstance(d['result']['user_block'], list), 'user_block이 배열이 아
         info "차단 목록 ${BLOCK_CNT}명"
     else
         fail "POST /proc/viewer_board_comment — get_user_block: JSON 파싱 실패 또는 구조 오류"
+        info "응답: ${BODY:0:200}"
+    fi
+
+    # 사용자 이모티콘 그룹 목록 (인증 상태)
+    do_request "GET /proc/emoticon_proc — get_user_emoticon_group (로그인)" "200" \
+        -H "$COOKIE_HEADER" \
+        "${BASE_URL}/proc/emoticon_proc?mode=get_user_emoticon_group"
+    if echo "$BODY" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+assert d.get('status') in ('200', 200), 'status != 200'
+assert isinstance(d.get('data'), list), 'data 필드가 배열이 아님'
+" 2>/dev/null; then
+        EMO_CNT=$(echo "$BODY" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['data']))" 2>/dev/null || echo "?")
+        info "보유 이모티콘 그룹 ${EMO_CNT}개"
+    else
+        fail "GET /proc/emoticon_proc — get_user_emoticon_group: JSON 파싱 실패 또는 구조 오류"
         info "응답: ${BODY:0:200}"
     fi
 
