@@ -247,10 +247,10 @@ async fn run(cli: &Cli, client: &novelpia::Client) -> Result<(), Box<dyn std::er
                     .split_once('=')
                     .ok_or_else(|| format!("--grep requires FIELD=PATTERN, got: {raw}"))?;
                 Some((field, pattern))
-            } else if let Some(pattern) = grep_memo {
-                Some(("badge_memo", pattern.as_str()))
             } else {
-                None
+                grep_memo
+                    .as_ref()
+                    .map(|pattern| ("badge_memo", pattern.as_str()))
             };
             if let Some((field, pattern)) = grep_spec {
                 let re = regex::Regex::new(pattern).map_err(|e| format!("invalid pattern: {e}"))?;
