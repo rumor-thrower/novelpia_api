@@ -101,14 +101,22 @@ impl Client {
 pub fn parse_episode_list_html(html: &str) -> Result<Vec<EpisodeListRow>> {
     let document = Html::parse_fragment(html);
 
-    // Each episode row has class "ep_style" (or "ep_style2" for free episodes in some layouts).
-    let row_sel = Selector::parse("li.ep_style, li.ep_style2, li.ep_style3")
+    // The live episode table renders each row as `<tr class="ep_style5">`.
+    // Older/alternate layouts used `<li class="ep_style">`; accept both.
+    let row_sel = Selector::parse("tr.ep_style5, li.ep_style, li.ep_style2, li.ep_style3")
         .map_err(|e| Error::parse(format!("episode row selector parse error: {:?}", e)))?;
-    let title_sel = Selector::parse("b.ep_title, .b_title, .ep_title")
+    // The title lives in the first <b> of the clickable cell; the trailing view
+    // metadata lives inside `.ep_style2` so restrict title lookup to the outer
+    // <b> tags. `b.ep_title` covers the legacy fixture.
+    let title_sel = Selector::parse("b.ep_title, .b_title, .ep_title, b")
         .map_err(|e| Error::parse(format!("title selector parse error: {:?}", e)))?;
-    let date_sel = Selector::parse(".ep_date, .p_date")
+    // Free/plus/adult badge markers.
+    let free_sel = Selector::parse("span.b_free")
+        .map_err(|e| Error::parse(format!("free selector parse error: {:?}", e)))?;
+    let legacy_date_sel = Selector::parse(".ep_date, .p_date")
         .map_err(|e| Error::parse(format!("date selector parse error: {:?}", e)))?;
-    let view_sel = Selector::parse(".ep_view, .p_view, .count_view")
+    // Live view count.
+    let view_sel = Selector::parse("span.episode_count_view, .ep_view, .p_view, .count_view")
         .map_err(|e| Error::parse(format!("view selector parse error: {:?}", e)))?;
 
     let mut rows = Vec::new();
@@ -119,20 +127,33 @@ pub fn parse_episode_list_html(html: &str) -> Result<Vec<EpisodeListRow>> {
         let ep_no = extract_episode_no(&row);
         let Some(episode_no) = ep_no else { continue };
 
+        // Title: first matching <b>, with any leading badge text (e.g. "무료")
+        // stripped. The badge is a nested <span> whose text we remove.
         let title = row
             .select(&title_sel)
             .next()
-            .map(|el| el.text().collect::<String>().trim().to_owned())
+            .map(|el| {
+                let badge: String = el
+                    .select(&free_sel)
+                    .next()
+                    .map(|b| b.text().collect())
+                    .unwrap_or_default();
+                let full: String = el.text().collect();
+                full.replace(&badge, "").trim().to_owned()
+            })
             .unwrap_or_default();
 
-        // Free episodes typically carry a "FREE" badge or lack a coin indicator.
-        let is_free = !row.inner_html().contains("class=\"ep_type\"")
-            && !row.inner_html().contains("plus_ep");
+        // Free episodes carry a `span.b_free` badge (무료); plus/adult episodes
+        // use `b_plus`/`b_19` instead.
+        let is_free = row.select(&free_sel).next().is_some();
 
+        // Date: legacy `.ep_date`, else the `NN.NN.NN` run in the live markup.
         let reg_date = row
-            .select(&date_sel)
+            .select(&legacy_date_sel)
             .next()
-            .map(|el| el.text().collect::<String>().trim().to_owned());
+            .map(|el| el.text().collect::<String>().trim().to_owned())
+            .filter(|s| !s.is_empty())
+            .or_else(|| extract_reg_date(&row));
 
         let count_view = row
             .select(&view_sel)
@@ -149,6 +170,30 @@ pub fn parse_episode_list_html(html: &str) -> Result<Vec<EpisodeListRow>> {
     }
 
     Ok(rows)
+}
+
+/// Extract a `YY.MM.DD` date from a row's text content.
+fn extract_reg_date(row: &scraper::ElementRef<'_>) -> Option<String> {
+    let text: String = row.text().collect();
+    // Scan for the first `NN.NN.NN` pattern.
+    let bytes = text.as_bytes();
+    let is_d = |b: u8| b.is_ascii_digit();
+    let mut i = 0;
+    while i + 8 <= bytes.len() {
+        if is_d(bytes[i])
+            && is_d(bytes[i + 1])
+            && bytes[i + 2] == b'.'
+            && is_d(bytes[i + 3])
+            && is_d(bytes[i + 4])
+            && bytes[i + 5] == b'.'
+            && is_d(bytes[i + 6])
+            && is_d(bytes[i + 7])
+        {
+            return Some(text[i..i + 8].to_owned());
+        }
+        i += 1;
+    }
+    None
 }
 
 fn extract_episode_no(el: &scraper::ElementRef<'_>) -> Option<u64> {
@@ -236,6 +281,41 @@ mod tests {
         assert_eq!(rows[0].title, "1화 제목");
         assert_eq!(rows[0].reg_date.as_deref(), Some("2024.01.01"));
         assert_eq!(rows[0].count_view.as_deref(), Some("1,234"));
+    }
+
+    #[test]
+    fn parse_episode_list_live_table_markup() {
+        // Trimmed from a live `/proc/episode_list` response.
+        let html = r#"
+        <table id="episode_table">
+            <tr class="ep_style5" data-episode-no="1134">
+                <td class=""><div class="episode_view_1134"></div></td>
+                <td class="font12"><b>
+                    <span class="b_free s_inv">무료</span>
+                    <i class="icon ion-bookmark" id="bookmark_1134"></i>#01_마녀도시의 노예</b> <br>
+                    <div class="ep_style2"><font class="font11">
+                        <span>EP.1</span>
+                        <span><i class="icon ion-document-text"></i> 3,867
+                            <span class="episode_show"><i class="icon ion-android-people"></i>
+                                <span class="episode_count_view novel_count_view_1134">42</span>
+                            </span>
+                            <i class="icon ion-chatbox-working"></i> 226
+                            <i class="icon ion-thumbsup"></i> 3,902<br>
+                            <b>21.01.07</b>
+                        </span>
+                    </font></div>
+                </td>
+                <td class="ep_style3"></td>
+            </tr>
+        </table>
+        "#;
+        let rows = parse_episode_list_html(html).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].episode_no, 1134);
+        assert_eq!(rows[0].title, "#01_마녀도시의 노예");
+        assert!(rows[0].is_free);
+        assert_eq!(rows[0].reg_date.as_deref(), Some("21.01.07"));
+        assert_eq!(rows[0].count_view.as_deref(), Some("42"));
     }
 
     #[test]

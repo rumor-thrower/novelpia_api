@@ -112,14 +112,33 @@ pub fn parse_viewer_lines(body: &str) -> Result<Vec<String>> {
     struct Line {
         text: String,
     }
-    let lines: Vec<Line> = serde_json::from_str(body).map_err(|_| {
-        // Server returns an HTML alert modal on paywall / login failure.
-        if body.trim_start().starts_with('<') {
-            Error::NotAccessible("viewer returned HTML instead of JSON (paywall or auth)".into())
-        } else {
-            Error::parse(format!("viewer response is not JSON: {:?}", &body[..body.len().min(120)]))
-        }
-    })?;
+    // The viewer response is an object `{"s": [{"text": ...}], "c": ...}`; the
+    // paragraph lines live under `s`. Older responses were a bare array, so
+    // accept both shapes.
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Viewer {
+        Wrapped { s: Vec<Line> },
+        Bare(Vec<Line>),
+    }
+    let lines: Vec<Line> = serde_json::from_str::<Viewer>(body)
+        .map(|v| match v {
+            Viewer::Wrapped { s } => s,
+            Viewer::Bare(s) => s,
+        })
+        .map_err(|_| {
+            // Server returns an HTML alert modal on paywall / login failure.
+            if body.trim_start().starts_with('<') {
+                Error::NotAccessible(
+                    "viewer returned HTML instead of JSON (paywall or auth)".into(),
+                )
+            } else {
+                Error::parse(format!(
+                    "viewer response is not JSON: {:?}",
+                    &body[..body.len().min(120)]
+                ))
+            }
+        })?;
     Ok(lines
         .into_iter()
         .map(|l| {
@@ -157,6 +176,13 @@ mod tests {
     #[test]
     fn parse_viewer_lines_nbsp() {
         let json = r#"[{"text":"Hello"},{"text":"&nbsp;"},{"text":"World"}]"#;
+        let lines = parse_viewer_lines(json).unwrap();
+        assert_eq!(lines, vec!["Hello", "", "World"]);
+    }
+
+    #[test]
+    fn parse_viewer_lines_wrapped_object() {
+        let json = r#"{"s":[{"text":"Hello"},{"text":"&nbsp;"},{"text":"World"}],"c":1}"#;
         let lines = parse_viewer_lines(json).unwrap();
         assert_eq!(lines, vec!["Hello", "", "World"]);
     }
