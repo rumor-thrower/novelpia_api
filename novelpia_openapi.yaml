@@ -943,7 +943,7 @@ paths:
       description: |
         특정 소설의 작품평(리뷰) 목록을 반환합니다.
 
-        `cmd=get_novel_review_list` 와 `novel_no` 쿼리 파라미터가 필수입니다.
+        `cmd=get_novel_review_list` 와 `target_novel_no` 쿼리 파라미터가 필수입니다.
         `_` 파라미터는 캐시 무효화용 타임스탬프이며 생략 가능합니다.
       operationId: getNovelReviewList
       parameters:
@@ -954,7 +954,7 @@ paths:
             type: string
             enum: [get_novel_review_list]
           example: "get_novel_review_list"
-        - name: novel_no
+        - name: target_novel_no
           in: query
           required: true
           schema:

@@ -16,12 +16,12 @@ use crate::{
 // ---------------------------------------------------------------------------
 
 impl Client {
-    /// `GET /proc/novel?cmd=get_novel_review_list&novel_no=<N>`
+    /// `GET /proc/novel?cmd=get_novel_review_list&target_novel_no=<N>`
     ///
     /// Returns the list of reviews (작품평) for a novel. Public, no auth required.
     pub async fn get_novel_review_list(&self, novel_no: u64) -> Result<Vec<NovelReviewItem>> {
         let url = format!(
-            "{}/proc/novel?cmd=get_novel_review_list&novel_no={}",
+            "{}/proc/novel?cmd=get_novel_review_list&target_novel_no={}",
             self.base_url, novel_no
         );
         let resp = self.get(&url).await?;
