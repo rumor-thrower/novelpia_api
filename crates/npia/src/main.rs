@@ -230,13 +230,10 @@ async fn run(cli: &Cli, client: &novelpia::Client) -> Result<(), Box<dyn std::er
                 MemberMode::GetEpisodeCnt => client.get_episode_cnt(*mem_no).await?,
             };
             if *scalar {
-                let scalar_val = val.get("result").unwrap_or(&val);
-                match scalar_val {
-                    serde_json::Value::String(s) => println!("{}", s),
-                    serde_json::Value::Number(n) => println!("{}", n),
-                    serde_json::Value::Bool(b) => println!("{}", b),
-                    serde_json::Value::Null => println!("null"),
-                    other => println!("{}", serde_json::to_string_pretty(other)?),
+                let target = val.get("result").unwrap_or(&val);
+                match format_scalar(target) {
+                    Some(s) => println!("{}", s),
+                    None => eprintln!("note: no scalar value found in result"),
                 }
             } else {
                 println!("{}", serde_json::to_string_pretty(&val)?);
@@ -269,6 +266,39 @@ async fn run(cli: &Cli, client: &novelpia::Client) -> Result<(), Box<dyn std::er
 // ---------------------------------------------------------------------------
 // Output helpers
 // ---------------------------------------------------------------------------
+
+/// Reduce a value to the scalar text that `member --scalar` should print,
+/// discarding nested arrays and objects (e.g. `badge` lists).
+///
+/// - A primitive becomes its bare text.
+/// - An object is reduced to its scalar-valued fields; a single such field
+///   yields its bare value, multiple yield `key=value` lines.
+/// - Returns `None` when there is no scalar to print (empty object / array).
+fn format_scalar(val: &serde_json::Value) -> Option<String> {
+    match val {
+        serde_json::Value::String(s) => Some(s.clone()),
+        serde_json::Value::Number(n) => Some(n.to_string()),
+        serde_json::Value::Bool(b) => Some(b.to_string()),
+        serde_json::Value::Null => Some("null".to_string()),
+        serde_json::Value::Object(map) => {
+            let scalars: Vec<(&String, &serde_json::Value)> = map
+                .iter()
+                .filter(|(_, v)| !matches!(v, serde_json::Value::Array(_) | serde_json::Value::Object(_)))
+                .collect();
+            match scalars.as_slice() {
+                [] => None,
+                [(_, v)] => format_scalar(v),
+                many => Some(
+                    many.iter()
+                        .filter_map(|(k, v)| format_scalar(v).map(|s| format!("{}={}", k, s)))
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                ),
+            }
+        }
+        serde_json::Value::Array(_) => None,
+    }
+}
 
 fn print_output<T: Serialize>(items: &T, fmt: &OutputFormat) -> Result<(), Box<dyn std::error::Error>> {
     match fmt {
@@ -311,4 +341,46 @@ fn print_output<T: Serialize>(items: &T, fmt: &OutputFormat) -> Result<(), Box<d
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::format_scalar;
+    use serde_json::json;
+
+    #[test]
+    fn scalar_primitive() {
+        assert_eq!(format_scalar(&json!(713)), Some("713".to_string()));
+        assert_eq!(format_scalar(&json!("hi")), Some("hi".to_string()));
+    }
+
+    #[test]
+    fn scalar_object_ignores_arrays() {
+        // Real get_member_keep_novel result: badge list is discarded,
+        // leaving only the keep_novel count.
+        let result = json!({
+            "badge": [
+                { "badge_url": "/img/new/icon/episode1.svg", "cnt": 713, "is_use": 1, "limit": 1 },
+                { "badge_url": "/img/new/icon/episode2.svg", "cnt": 713, "is_use": 1, "limit": 100 }
+            ],
+            "keep_novel": 713
+        });
+        assert_eq!(format_scalar(&result), Some("713".to_string()));
+    }
+
+    #[test]
+    fn scalar_object_multiple_fields() {
+        let result = json!({ "read": 100, "comment": 5, "list": [1, 2] });
+        let out = format_scalar(&result).unwrap();
+        // key=value lines, arrays skipped; order follows serde_json map order.
+        assert!(out.contains("read=100"));
+        assert!(out.contains("comment=5"));
+        assert!(!out.contains("list"));
+    }
+
+    #[test]
+    fn scalar_no_value() {
+        assert_eq!(format_scalar(&json!({ "badge": [1, 2] })), None);
+        assert_eq!(format_scalar(&json!([1, 2, 3])), None);
+    }
 }
