@@ -56,3 +56,59 @@ impl Error {
         Error::Parse(msg.to_string())
     }
 }
+
+/// Truncate a string to at most `max_bytes` bytes without splitting a
+/// multi-byte UTF-8 character.
+///
+/// Naive byte slicing (`&s[..s.len().min(max_bytes)]`) panics when the cut
+/// point lands inside a multi-byte codepoint — a real hazard here because
+/// Novelpia error bodies are Korean HTML. This backs off to the nearest
+/// preceding char boundary so it is always safe.
+pub(crate) fn truncate_on_char_boundary(s: &str, max_bytes: usize) -> &str {
+    if s.len() <= max_bytes {
+        return s;
+    }
+    let mut end = max_bytes;
+    while end > 0 && !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    &s[..end]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::truncate_on_char_boundary;
+
+    #[test]
+    fn truncate_ascii_within_limit_is_identity() {
+        assert_eq!(truncate_on_char_boundary("hello", 80), "hello");
+    }
+
+    #[test]
+    fn truncate_ascii_over_limit_cuts_exactly() {
+        assert_eq!(truncate_on_char_boundary("hello world", 5), "hello");
+    }
+
+    #[test]
+    fn truncate_never_panics_on_multibyte_boundary() {
+        // "가" is 3 bytes; a naive `&s[..80]` on this would panic mid-char.
+        let s = "가".repeat(100); // 300 bytes
+        let out = truncate_on_char_boundary(&s, 80);
+        // 80 is not a multiple of 3, so it backs off to 78 (26 chars).
+        assert_eq!(out.len(), 78);
+        assert_eq!(out.chars().count(), 26);
+        assert!(s.starts_with(out));
+    }
+
+    #[test]
+    fn truncate_at_exact_char_boundary_keeps_full_chars() {
+        let s = "가나다"; // 9 bytes
+        assert_eq!(truncate_on_char_boundary(s, 6), "가나");
+        assert_eq!(truncate_on_char_boundary(s, 9), "가나다");
+    }
+
+    #[test]
+    fn truncate_zero_bytes_is_empty() {
+        assert_eq!(truncate_on_char_boundary("가", 0), "");
+    }
+}

@@ -136,7 +136,7 @@ pub fn parse_viewer_lines(body: &str) -> Result<Vec<String>> {
             } else {
                 Error::parse(format!(
                     "viewer response is not JSON: {:?}",
-                    &body[..body.len().min(120)]
+                    crate::error::truncate_on_char_boundary(body, 120)
                 ))
             }
         })?;
@@ -193,6 +193,16 @@ mod tests {
         let html = "<html><body><script>alert('로그인 후 이용하세요')</script></body></html>";
         let err = parse_viewer_lines(html).unwrap_err();
         assert!(matches!(err, Error::NotAccessible(_)));
+    }
+
+    #[test]
+    fn parse_viewer_lines_long_korean_non_json_does_not_panic() {
+        // Non-JSON body that does not start with `<` (so it takes the Parse
+        // branch) and is longer than the 120-byte truncation limit. The
+        // formatter must back off to a char boundary rather than panic.
+        let body = "오류가 발생했습니다 ".repeat(20);
+        let err = parse_viewer_lines(&body).unwrap_err();
+        assert!(matches!(err, Error::Parse(_)));
     }
 
     #[test]

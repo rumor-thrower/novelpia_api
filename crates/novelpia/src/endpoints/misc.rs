@@ -183,7 +183,7 @@ fn parse_ok_pipe_json<T: serde::de::DeserializeOwned>(body: &str) -> Result<T> {
     let json_part = body.strip_prefix("OK|").ok_or_else(|| {
         Error::parse(format!(
             "expected OK| prefix, got: {:?}",
-            &body[..body.len().min(80)]
+            crate::error::truncate_on_char_boundary(body, 80)
         ))
     })?;
     serde_json::from_str(json_part).map_err(Error::Json)
@@ -213,6 +213,19 @@ mod tests {
     fn parse_ok_pipe_json_missing_prefix_errors() {
         let body = r#"[{"emoticon_group":1}]"#;
         let err = parse_ok_pipe_json::<Vec<EmoticonGroupInfo>>(body).unwrap_err();
+        assert!(matches!(err, Error::Parse(_)));
+    }
+
+    #[test]
+    fn parse_ok_pipe_json_long_korean_body_does_not_panic() {
+        // A Korean HTML error page lacking the `OK|` prefix, longer than the
+        // 80-byte truncation limit — the error formatter must not slice
+        // mid-UTF-8-char.
+        let body = format!(
+            "<html><body>{}</body></html>",
+            "로그인 후 이용하세요 ".repeat(20)
+        );
+        let err = parse_ok_pipe_json::<Vec<EmoticonGroupInfo>>(&body).unwrap_err();
         assert!(matches!(err, Error::Parse(_)));
     }
 }
