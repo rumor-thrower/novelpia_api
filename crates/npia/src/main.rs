@@ -614,8 +614,116 @@ fn write_csv<W: std::io::Write>(
 
 #[cfg(test)]
 mod tests {
-    use super::{format_iso8601, format_scalar, write_csv};
+    use super::{fetch_all_episodes, format_iso8601, format_scalar, write_csv};
     use serde_json::json;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
+
+    /// Starts a local HTTP server that answers every request with one HTML
+    /// fragment from `pages`, cycling to the last entry once exhausted — this
+    /// mimics a server that clamps an out-of-range `page` to the last valid
+    /// one instead of returning an empty result. Returns the `http://host:port`
+    /// base URL to point a `novelpia::Client` at.
+    async fn spawn_episode_list_server(pages: Vec<&'static str>) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let call_count = Arc::new(AtomicUsize::new(0));
+
+        tokio::spawn(async move {
+            loop {
+                let (mut socket, _) = match listener.accept().await {
+                    Ok(pair) => pair,
+                    Err(_) => break,
+                };
+                let pages = pages.clone();
+                let call_count = Arc::clone(&call_count);
+                tokio::spawn(async move {
+                    let mut buf = [0u8; 4096];
+                    // We don't need to parse the request; each connection is
+                    // one request and we only care about call order.
+                    let _ = socket.read(&mut buf).await;
+                    let idx = call_count.fetch_add(1, Ordering::SeqCst);
+                    let body = pages[idx.min(pages.len() - 1)];
+                    let response = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                        body.len(),
+                        body
+                    );
+                    let _ = socket.write_all(response.as_bytes()).await;
+                    let _ = socket.shutdown().await;
+                });
+            }
+        });
+
+        format!("http://{addr}")
+    }
+
+    fn episode_page(episode_no: u64) -> &'static str {
+        // Leaked so the fragment can outlive the connection task; test-only.
+        Box::leak(
+            format!(
+                r#"<ul><li class="ep_style" data-episode-no="{episode_no}">
+                    <b class="ep_title">ep</b>
+                </li></ul>"#
+            )
+            .into_boxed_str(),
+        )
+    }
+
+    #[tokio::test]
+    async fn fetch_all_episodes_stops_on_repeated_page() {
+        // Pages 0 and 1 are distinct; the server then keeps re-serving page 1
+        // for any further page number, as a clamping server would.
+        let pages = vec![episode_page(1), episode_page(2)];
+        let base_url = spawn_episode_list_server(pages).await;
+        let client = novelpia::Client::builder()
+            .base_url(base_url)
+            .delay_ms(0, 0)
+            .max_retries(0)
+            .build();
+
+        let episodes = fetch_all_episodes(&client, 1, "DOWN", 0).await.unwrap();
+
+        // Only the two genuinely distinct pages are kept; the repeated third
+        // page must not be appended again nor cause an infinite loop.
+        assert_eq!(episodes.len(), 2);
+        assert_eq!(episodes[0].episode_no, 1);
+        assert_eq!(episodes[1].episode_no, 2);
+    }
+
+    #[tokio::test]
+    async fn fetch_all_episodes_stops_at_max_pages_cap() {
+        // Every page is distinct, so only the hard cap can stop the loop.
+        let pages: Vec<&'static str> = (0..10).map(|i| episode_page(i + 1)).collect();
+        let base_url = spawn_episode_list_server(pages).await;
+        let client = novelpia::Client::builder()
+            .base_url(base_url)
+            .delay_ms(0, 0)
+            .max_retries(0)
+            .build();
+
+        let episodes = fetch_all_episodes(&client, 1, "DOWN", 3).await.unwrap();
+
+        assert_eq!(episodes.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn fetch_all_episodes_stops_on_empty_page() {
+        let pages = vec![episode_page(1), "<ul></ul>"];
+        let base_url = spawn_episode_list_server(pages).await;
+        let client = novelpia::Client::builder()
+            .base_url(base_url)
+            .delay_ms(0, 0)
+            .max_retries(0)
+            .build();
+
+        let episodes = fetch_all_episodes(&client, 1, "DOWN", 0).await.unwrap();
+
+        assert_eq!(episodes.len(), 1);
+        assert_eq!(episodes[0].episode_no, 1);
+    }
 
     #[test]
     fn iso8601_known_epochs() {
