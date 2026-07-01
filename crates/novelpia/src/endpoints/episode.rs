@@ -98,7 +98,7 @@ impl Client {
 // ---------------------------------------------------------------------------
 
 /// Parse the `POST /proc/episode_list` HTML fragment into typed rows.
-pub(crate) fn parse_episode_list_html(html: &str) -> Result<Vec<EpisodeListRow>> {
+pub fn parse_episode_list_html(html: &str) -> Result<Vec<EpisodeListRow>> {
     let document = Html::parse_fragment(html);
 
     // Each episode row has class "ep_style" (or "ep_style2" for free episodes in some layouts).

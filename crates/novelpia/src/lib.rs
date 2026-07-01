@@ -15,6 +15,7 @@ pub mod models;
 pub mod response;
 
 pub use client::{Client, ClientBuilder, Toggle};
+pub use endpoints::episode::parse_episode_list_html;
 pub use endpoints::misc::{EmoticonGroup, EmoticonGroupInfo, EmoticonItem};
 pub use error::{Error, Result};
 
