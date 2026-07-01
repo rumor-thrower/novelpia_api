@@ -1,5 +1,7 @@
 //! `npia` — command-line interface for the unofficial Novelpia API client.
 
+use std::path::{Path, PathBuf};
+
 use clap::{ArgAction, Parser, Subcommand, ValueEnum};
 use serde::Serialize;
 
@@ -140,6 +142,30 @@ enum Command {
     EmoticonItems {
         /// Emoticon group number
         group: u64,
+    },
+
+    /// Export a novel's data bundle (episodes, view counts, reviews) to CSV/JSON
+    /// files — the handoff artifacts consumed by the analysis layer.
+    Export {
+        /// Novel number
+        #[arg(long)]
+        novel: u64,
+
+        /// Output directory (created if missing)
+        #[arg(long, default_value = ".")]
+        out: PathBuf,
+
+        /// Sort order for the episode list
+        #[arg(long, default_value = "DOWN")]
+        sort: String,
+
+        /// Skip fetching per-episode view counts (faster, one fewer request batch)
+        #[arg(long, action = ArgAction::SetTrue)]
+        no_views: bool,
+
+        /// Stop after this many episode-list pages (0 = no limit)
+        #[arg(long, default_value = "0")]
+        max_pages: u32,
     },
 }
 
@@ -292,8 +318,144 @@ async fn run(cli: &Cli, client: &novelpia::Client) -> Result<(), Box<dyn std::er
             let items = client.get_user_emoticon(*group).await?;
             print_output(&items, &cli.format)?;
         }
+
+        Command::Export {
+            novel,
+            out,
+            sort,
+            no_views,
+            max_pages,
+        } => {
+            run_export(client, *novel, out, sort, *no_views, *max_pages).await?;
+        }
     }
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Export bundle
+// ---------------------------------------------------------------------------
+
+/// Metadata written alongside the exported data files.
+#[derive(Serialize)]
+struct ExportManifest {
+    novel_no: u64,
+    exported_at: String,
+    sort: String,
+    episode_count: usize,
+    view_count_rows: usize,
+    review_count: usize,
+    files: Vec<String>,
+}
+
+/// Fetch episode-list pages until an empty page is returned or `max_pages`
+/// is reached (`max_pages == 0` means no limit).
+async fn fetch_all_episodes(
+    client: &novelpia::Client,
+    novel: u64,
+    sort: &str,
+    max_pages: u32,
+) -> Result<Vec<novelpia::models::EpisodeListRow>, Box<dyn std::error::Error>> {
+    let mut all = Vec::new();
+    let mut page = 0u32;
+    loop {
+        if max_pages != 0 && page >= max_pages {
+            break;
+        }
+        let rows = client.get_episode_list(novel, sort, page).await?;
+        if rows.is_empty() {
+            break;
+        }
+        all.extend(rows);
+        page += 1;
+    }
+    Ok(all)
+}
+
+async fn run_export(
+    client: &novelpia::Client,
+    novel: u64,
+    out: &Path,
+    sort: &str,
+    no_views: bool,
+    max_pages: u32,
+) -> Result<(), Box<dyn std::error::Error>> {
+    std::fs::create_dir_all(out)?;
+
+    // 1. Episode list (paginated).
+    let episodes = fetch_all_episodes(client, novel, sort, max_pages).await?;
+    let episodes_file = format!("novel_{novel}_episodes.csv");
+    write_csv_file(&out.join(&episodes_file), &episodes)?;
+    eprintln!("wrote {} ({} episodes)", episodes_file, episodes.len());
+
+    // 2. Per-episode view counts (batched over the episode numbers we just found).
+    let mut view_rows = 0usize;
+    let mut files = vec![episodes_file];
+    if !no_views && !episodes.is_empty() {
+        let episode_nos: Vec<u64> = episodes.iter().map(|e| e.episode_no).collect();
+        let views = client
+            .get_episode_view_counts(novel, &episode_nos, false)
+            .await?;
+        view_rows = views.len();
+        let views_file = format!("novel_{novel}_views.csv");
+        write_csv_file(&out.join(&views_file), &views)?;
+        eprintln!("wrote {} ({} rows)", views_file, views.len());
+        files.push(views_file);
+    }
+
+    // 3. Reviews.
+    let reviews = client.get_novel_review_list(novel).await?;
+    let reviews_file = format!("novel_{novel}_reviews.csv");
+    write_csv_file(&out.join(&reviews_file), &reviews)?;
+    eprintln!("wrote {} ({} reviews)", reviews_file, reviews.len());
+    files.push(reviews_file);
+
+    // 4. Manifest.
+    let manifest = ExportManifest {
+        novel_no: novel,
+        exported_at: iso8601_now(),
+        sort: sort.to_string(),
+        episode_count: episodes.len(),
+        view_count_rows: view_rows,
+        review_count: reviews.len(),
+        files,
+    };
+    let manifest_path = out.join(format!("novel_{novel}_manifest.json"));
+    std::fs::write(&manifest_path, serde_json::to_string_pretty(&manifest)?)?;
+    eprintln!("wrote {}", manifest_path.display());
+
+    Ok(())
+}
+
+/// UTC timestamp in a plain `YYYY-MM-DDTHH:MM:SSZ` form, derived from the
+/// system clock without pulling in a datetime crate.
+fn iso8601_now() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    format_iso8601(secs)
+}
+
+/// Format seconds-since-Unix-epoch as `YYYY-MM-DDTHH:MM:SSZ` (UTC).
+///
+/// The civil date is computed via Howard Hinnant's `days_from_civil` inverse.
+fn format_iso8601(secs: u64) -> String {
+    let days = (secs / 86_400) as i64;
+    let rem = secs % 86_400;
+    let (hh, mm, ss) = (rem / 3600, (rem % 3600) / 60, rem % 60);
+    let z = days + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    format!("{y:04}-{m:02}-{d:02}T{hh:02}:{mm:02}:{ss:02}Z")
 }
 
 // ---------------------------------------------------------------------------
@@ -386,46 +548,106 @@ fn print_output<T: Serialize>(
             println!("{}", serde_json::to_string_pretty(items)?);
         }
         OutputFormat::Csv => {
-            let mut wtr = csv::Writer::from_writer(std::io::stdout());
-            // Serialise via JSON value for generic CSV output.
             let val = serde_json::to_value(items)?;
-            match val {
-                serde_json::Value::Array(arr) => {
-                    let mut header_written = false;
-                    for item in arr {
-                        if let serde_json::Value::Object(map) = item {
-                            if !header_written {
-                                let keys: Vec<&str> = map.keys().map(|k| k.as_str()).collect();
-                                wtr.write_record(&keys)?;
-                                header_written = true;
-                            }
-                            let vals: Vec<String> = map
-                                .values()
-                                .map(|v| match v {
-                                    serde_json::Value::String(s) => s.clone(),
-                                    serde_json::Value::Null => String::new(),
-                                    other => other.to_string(),
-                                })
-                                .collect();
-                            wtr.write_record(&vals)?;
-                        }
-                    }
-                }
-                other => {
-                    eprintln!("note: non-array value, falling back to JSON");
-                    println!("{}", serde_json::to_string_pretty(&other)?);
-                }
+            if !write_csv(std::io::stdout(), &val)? {
+                eprintln!("note: non-array value, falling back to JSON");
+                println!("{}", serde_json::to_string_pretty(&val)?);
             }
-            wtr.flush()?;
         }
     }
     Ok(())
 }
 
+/// Serialize `items` as CSV to `path`. Returns an error if the value is not a
+/// JSON array of objects (export data is always tabular).
+fn write_csv_file<T: Serialize>(path: &Path, items: &T) -> Result<(), Box<dyn std::error::Error>> {
+    let val = serde_json::to_value(items)?;
+    let file = std::fs::File::create(path)?;
+    if !write_csv(file, &val)? {
+        return Err(format!("cannot write {}: value is not a table", path.display()).into());
+    }
+    Ok(())
+}
+
+/// Write a JSON array-of-objects `val` as CSV to `sink`. The column order
+/// follows the first object's keys. Returns `Ok(false)` (writing nothing) when
+/// `val` is not an array, so callers can fall back to another format.
+fn write_csv<W: std::io::Write>(
+    sink: W,
+    val: &serde_json::Value,
+) -> Result<bool, Box<dyn std::error::Error>> {
+    let arr = match val {
+        serde_json::Value::Array(arr) => arr,
+        _ => return Ok(false),
+    };
+    let mut wtr = csv::Writer::from_writer(sink);
+    let mut header_written = false;
+    for item in arr {
+        if let serde_json::Value::Object(map) = item {
+            if !header_written {
+                let keys: Vec<&str> = map.keys().map(|k| k.as_str()).collect();
+                wtr.write_record(&keys)?;
+                header_written = true;
+            }
+            let vals: Vec<String> = map
+                .values()
+                .map(|v| match v {
+                    serde_json::Value::String(s) => s.clone(),
+                    serde_json::Value::Null => String::new(),
+                    other => other.to_string(),
+                })
+                .collect();
+            wtr.write_record(&vals)?;
+        }
+    }
+    wtr.flush()?;
+    Ok(true)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::format_scalar;
+    use super::{format_iso8601, format_scalar, write_csv};
     use serde_json::json;
+
+    #[test]
+    fn iso8601_known_epochs() {
+        // Unix epoch.
+        assert_eq!(format_iso8601(0), "1970-01-01T00:00:00Z");
+        // 2001-09-09T01:46:40Z — the classic 1e9 timestamp.
+        assert_eq!(format_iso8601(1_000_000_000), "2001-09-09T01:46:40Z");
+        // A leap-year date: 2020-02-29T12:00:00Z.
+        assert_eq!(format_iso8601(1_582_977_600), "2020-02-29T12:00:00Z");
+    }
+
+    #[test]
+    fn csv_writes_array_of_objects() {
+        let val = json!([
+            { "episode_no": 1, "title": "a", "is_free": true },
+            { "episode_no": 2, "title": "b", "is_free": false }
+        ]);
+        let mut buf = Vec::new();
+        let wrote = write_csv(&mut buf, &val).unwrap();
+        assert!(wrote);
+        let out = String::from_utf8(buf).unwrap();
+        let lines: Vec<&str> = out.lines().collect();
+        // Header carries every field; column order follows serde_json's map order.
+        let header = lines[0];
+        assert!(header.contains("episode_no"));
+        assert!(header.contains("title"));
+        assert!(header.contains("is_free"));
+        assert_eq!(lines.len(), 3); // header + 2 rows
+        assert!(lines[1].contains('a') && lines[1].contains("true"));
+        assert!(lines[2].contains('b') && lines[2].contains("false"));
+    }
+
+    #[test]
+    fn csv_rejects_non_array() {
+        let val = json!({ "not": "a table" });
+        let mut buf = Vec::new();
+        let wrote = write_csv(&mut buf, &val).unwrap();
+        assert!(!wrote);
+        assert!(buf.is_empty());
+    }
 
     #[test]
     fn scalar_primitive() {
