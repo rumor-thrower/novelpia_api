@@ -8,11 +8,7 @@ use serde::Serialize;
 // ---------------------------------------------------------------------------
 
 #[derive(Parser)]
-#[command(
-    name = "npia",
-    about = "Unofficial Novelpia API client CLI",
-    version
-)]
+#[command(name = "npia", about = "Unofficial Novelpia API client CLI", version)]
 struct Cli {
     /// LOGINKEY cookie value (or set env LOGINKEY)
     #[arg(long, env = "LOGINKEY", global = true)]
@@ -168,8 +164,7 @@ enum MemberMode {
 async fn main() {
     let cli = Cli::parse();
 
-    let mut builder = novelpia::ClientBuilder::default()
-        .delay_ms(cli.delay_min, cli.delay_max);
+    let mut builder = novelpia::ClientBuilder::default().delay_ms(cli.delay_min, cli.delay_max);
     if let Some(key) = &cli.login_key {
         builder = builder.login_key(key.clone());
     }
@@ -195,7 +190,11 @@ async fn run(cli: &Cli, client: &novelpia::Client) -> Result<(), Box<dyn std::er
             print_output(&items, &cli.format)?;
         }
 
-        Command::Views { novel, episodes, legacy } => {
+        Command::Views {
+            novel,
+            episodes,
+            legacy,
+        } => {
             let items = client
                 .get_episode_view_counts(*novel, episodes, *legacy)
                 .await?;
@@ -221,7 +220,13 @@ async fn run(cli: &Cli, client: &novelpia::Client) -> Result<(), Box<dyn std::er
             }
         }
 
-        Command::Member { mem_no, mode, scalar, grep, grep_memo } => {
+        Command::Member {
+            mem_no,
+            mode,
+            scalar,
+            grep,
+            grep_memo,
+        } => {
             let val: serde_json::Value = match mode {
                 MemberMode::GetMember2 => client.get_member2(*mem_no).await?,
                 MemberMode::GetMemberView => {
@@ -248,8 +253,7 @@ async fn run(cli: &Cli, client: &novelpia::Client) -> Result<(), Box<dyn std::er
                 None
             };
             if let Some((field, pattern)) = grep_spec {
-                let re = regex::Regex::new(pattern)
-                    .map_err(|e| format!("invalid pattern: {e}"))?;
+                let re = regex::Regex::new(pattern).map_err(|e| format!("invalid pattern: {e}"))?;
                 let filtered = grep_field_items(&val, field, &re);
                 println!("{}", serde_json::to_string_pretty(&filtered)?);
             } else if *scalar {
@@ -268,8 +272,14 @@ async fn run(cli: &Cli, client: &novelpia::Client) -> Result<(), Box<dyn std::er
             println!("{}", cnt);
         }
 
-        Command::Curation { mem_no, novel, page } => {
-            let novels = client.get_writer_other_novels(*mem_no, *novel, *page).await?;
+        Command::Curation {
+            mem_no,
+            novel,
+            page,
+        } => {
+            let novels = client
+                .get_writer_other_novels(*mem_no, *novel, *page)
+                .await?;
             print_output(&novels, &cli.format)?;
         }
 
@@ -306,7 +316,12 @@ fn format_scalar(val: &serde_json::Value) -> Option<String> {
         serde_json::Value::Object(map) => {
             let scalars: Vec<(&String, &serde_json::Value)> = map
                 .iter()
-                .filter(|(_, v)| !matches!(v, serde_json::Value::Array(_) | serde_json::Value::Object(_)))
+                .filter(|(_, v)| {
+                    !matches!(
+                        v,
+                        serde_json::Value::Array(_) | serde_json::Value::Object(_)
+                    )
+                })
                 .collect();
             match scalars.as_slice() {
                 [] => None,
@@ -325,7 +340,11 @@ fn format_scalar(val: &serde_json::Value) -> Option<String> {
 
 /// Walk a JSON value, collecting every object whose `field` key has a string
 /// value matching `re`.  Descends into arrays and nested objects.
-fn grep_field_items(val: &serde_json::Value, field: &str, re: &regex::Regex) -> Vec<serde_json::Value> {
+fn grep_field_items(
+    val: &serde_json::Value,
+    field: &str,
+    re: &regex::Regex,
+) -> Vec<serde_json::Value> {
     let mut out = Vec::new();
     collect_field_matches(val, field, re, &mut out);
     out
@@ -358,7 +377,10 @@ fn collect_field_matches(
     }
 }
 
-fn print_output<T: Serialize>(items: &T, fmt: &OutputFormat) -> Result<(), Box<dyn std::error::Error>> {
+fn print_output<T: Serialize>(
+    items: &T,
+    fmt: &OutputFormat,
+) -> Result<(), Box<dyn std::error::Error>> {
     match fmt {
         OutputFormat::Json => {
             println!("{}", serde_json::to_string_pretty(items)?);
@@ -373,8 +395,7 @@ fn print_output<T: Serialize>(items: &T, fmt: &OutputFormat) -> Result<(), Box<d
                     for item in arr {
                         if let serde_json::Value::Object(map) = item {
                             if !header_written {
-                                let keys: Vec<&str> =
-                                    map.keys().map(|k| k.as_str()).collect();
+                                let keys: Vec<&str> = map.keys().map(|k| k.as_str()).collect();
                                 wtr.write_record(&keys)?;
                                 header_written = true;
                             }

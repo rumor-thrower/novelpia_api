@@ -4,11 +4,11 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use crate::{
+    Client,
     client::Toggle,
     error::{Error, Result},
     models::{MemberBlockChk, MemberView, Novel},
-    response::{parse_base, BaseResponse},
-    Client,
+    response::{BaseResponse, parse_base},
 };
 
 // ---------------------------------------------------------------------------
@@ -155,8 +155,7 @@ impl Client {
         match r.result {
             None | Some(Value::Null) | Some(Value::Bool(false)) => Ok(None),
             Some(v) => {
-                let chk: MemberBlockChk =
-                    serde_json::from_value(v).map_err(Error::Json)?;
+                let chk: MemberBlockChk = serde_json::from_value(v).map_err(Error::Json)?;
                 Ok(Some(chk))
             }
         }
@@ -195,10 +194,7 @@ impl Client {
         let url = format!("{}/proc/viewer_board_comment", self.base_url);
         let mem_no_s = mem_no.to_string();
         let resp = self
-            .post_form(
-                &url,
-                &[("mode", "get_user_block"), ("mem_no", &mem_no_s)],
-            )
+            .post_form(&url, &[("mode", "get_user_block"), ("mem_no", &mem_no_s)])
             .await?;
         let body = resp.text().await.map_err(Error::Http)?;
 
@@ -232,10 +228,7 @@ impl Client {
         let url = format!("{}/proc/member_block", self.base_url);
         let member_no_s = member_no.to_string();
         let resp = self
-            .post_form(
-                &url,
-                &[("member_no", &member_no_s), ("csrf", csrf)],
-            )
+            .post_form(&url, &[("member_no", &member_no_s), ("csrf", csrf)])
             .await?;
         let body = resp.text().await.map_err(Error::Http)?;
         Toggle::parse(&body)

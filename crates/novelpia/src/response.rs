@@ -74,7 +74,8 @@ impl<T> BaseResponse<T> {
                 url: String::new(),
             });
         }
-        self.result.ok_or_else(|| Error::parse("missing `result` field in response"))
+        self.result
+            .ok_or_else(|| Error::parse("missing `result` field in response"))
     }
 }
 

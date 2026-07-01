@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 /// Deserialise a field that the server sends as either an integer or a quoted
 /// integer string — common in Novelpia's API (e.g. `novel_no`, `status`).
 pub(crate) mod serde_u64_or_str {
-    use serde::{de, Deserializer};
+    use serde::{Deserializer, de};
     use std::fmt;
 
     struct V;
@@ -32,7 +32,6 @@ pub(crate) mod serde_u64_or_str {
         d.deserialize_any(V)
     }
 }
-
 
 // ---------------------------------------------------------------------------
 // Novelpia serial-publication status

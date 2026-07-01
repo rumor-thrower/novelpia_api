@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use rand::Rng;
-use reqwest::{header, Response};
+use reqwest::{Response, header};
 
 use crate::error::{Error, Result};
 
@@ -54,10 +54,7 @@ impl Toggle {
         match parts[0] {
             "login" => Ok(Toggle::Login),
             "on" | "off" => {
-                let n: u64 = parts
-                    .get(1)
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(0);
+                let n: u64 = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
                 if parts[0] == "on" {
                     Ok(Toggle::On(n))
                 } else {
@@ -124,9 +121,7 @@ impl Client {
     // -----------------------------------------------------------------------
 
     fn build_cookie_header(&self) -> Option<String> {
-        self.login_key
-            .as_deref()
-            .map(|k| format!("LOGINKEY={}", k))
+        self.login_key.as_deref().map(|k| format!("LOGINKEY={}", k))
     }
 
     fn random_delay_ms(&self) -> u64 {
@@ -194,17 +189,11 @@ impl Client {
                 Err(e) => return Err(Error::Http(e)),
             }
         }
-        Err(last_err.unwrap_or_else(|| {
-            Error::parse(format!("GET {} failed after retries", url))
-        }))
+        Err(last_err.unwrap_or_else(|| Error::parse(format!("GET {} failed after retries", url))))
     }
 
     /// Perform a POST with form-encoded body, retry/backoff/UA-rotation and optional delay.
-    pub(crate) async fn post_form(
-        &self,
-        url: &str,
-        form: &[(&str, &str)],
-    ) -> Result<Response> {
+    pub(crate) async fn post_form(&self, url: &str, form: &[(&str, &str)]) -> Result<Response> {
         self.sleep_delay().await;
         let mut last_err: Option<Error> = None;
         for attempt in 0..=self.max_retries {
@@ -238,9 +227,7 @@ impl Client {
                 Err(e) => return Err(Error::Http(e)),
             }
         }
-        Err(last_err.unwrap_or_else(|| {
-            Error::parse(format!("POST {} failed after retries", url))
-        }))
+        Err(last_err.unwrap_or_else(|| Error::parse(format!("POST {} failed after retries", url))))
     }
 
     /// POST with an explicit per-request Referer (required by viewer_data).
@@ -283,16 +270,12 @@ impl Client {
                 Err(e) => return Err(Error::Http(e)),
             }
         }
-        Err(last_err.unwrap_or_else(|| {
-            Error::parse(format!("POST {} failed after retries", url))
-        }))
+        Err(last_err.unwrap_or_else(|| Error::parse(format!("POST {} failed after retries", url))))
     }
 
     /// Assert that a `LOGINKEY` is configured; return `Err(AuthRequired)` otherwise.
     pub(crate) fn require_auth(&self) -> Result<&str> {
-        self.login_key
-            .as_deref()
-            .ok_or(Error::AuthRequired)
+        self.login_key.as_deref().ok_or(Error::AuthRequired)
     }
 }
 

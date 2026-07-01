@@ -4,11 +4,11 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use crate::{
+    Client,
     client::Toggle,
     error::{Error, Result},
     models::{EpisodeViewCount, Novel, NovelReviewItem},
     response::{parse_base, parse_list},
-    Client,
 };
 
 // ---------------------------------------------------------------------------
@@ -81,9 +81,7 @@ impl Client {
     pub async fn toggle_novel_alarm(&self, novel_no: u64) -> Result<Toggle> {
         let url = format!("{}/proc/novel_alarm", self.base_url);
         let novel_no_s = novel_no.to_string();
-        let resp = self
-            .post_form(&url, &[("novel_no", &novel_no_s)])
-            .await?;
+        let resp = self.post_form(&url, &[("novel_no", &novel_no_s)]).await?;
         let body = resp.text().await.map_err(Error::Http)?;
         Toggle::parse(&body)
     }
@@ -97,10 +95,7 @@ impl Client {
         let url = format!("{}/proc/novel_like", self.base_url);
         let novel_no_s = novel_no.to_string();
         let resp = self
-            .post_form(
-                &url,
-                &[("novel_no", &novel_no_s), ("csrf", csrf)],
-            )
+            .post_form(&url, &[("novel_no", &novel_no_s), ("csrf", csrf)])
             .await?;
         let body = resp.text().await.map_err(Error::Http)?;
         Toggle::parse(&body)
@@ -135,19 +130,14 @@ impl Client {
             .extra
             .get("writer_other_novel")
             .ok_or_else(|| Error::parse("missing `writer_other_novel` in curation response"))?;
-        let inner: WriterOther =
-            serde_json::from_value(val.clone()).map_err(Error::Json)?;
+        let inner: WriterOther = serde_json::from_value(val.clone()).map_err(Error::Json)?;
         Ok(inner.list)
     }
 
     /// `GET /proc/novel_curation?cmd=epi_list_curation&main_genre=<G>&novel_no=<N>`
     ///
     /// Returns genre-based episode viewer recommendations.
-    pub async fn get_epi_list_curation(
-        &self,
-        main_genre: u8,
-        novel_no: u64,
-    ) -> Result<Vec<Novel>> {
+    pub async fn get_epi_list_curation(&self, main_genre: u8, novel_no: u64) -> Result<Vec<Novel>> {
         let url = format!(
             "{}/proc/novel_curation?cmd=epi_list_curation&main_genre={}&novel_no={}",
             self.base_url, main_genre, novel_no

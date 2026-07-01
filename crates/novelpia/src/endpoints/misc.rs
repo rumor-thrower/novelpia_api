@@ -4,9 +4,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
-    error::{Error, Result},
-    response::{parse_base, BaseResponse},
     Client,
+    error::{Error, Result},
+    response::{BaseResponse, parse_base},
 };
 
 // ---------------------------------------------------------------------------
@@ -20,9 +20,7 @@ impl Client {
     /// returns status 200 with cnt=0).
     pub async fn get_alarm_cnt(&self) -> Result<u64> {
         let url = format!("{}/proc/alarm", self.base_url);
-        let resp = self
-            .post_form(&url, &[("mode", "getAlarmCnt")])
-            .await?;
+        let resp = self.post_form(&url, &[("mode", "getAlarmCnt")]).await?;
         let body = resp.text().await.map_err(Error::Http)?;
 
         #[derive(Deserialize)]
@@ -79,10 +77,7 @@ impl Client {
     ///
     /// When unauthenticated, the server returns status 200 with an empty `data` array.
     /// Pass `target_sort = true` to include the `target=sort` variant (adds `is_hide` flag).
-    pub async fn get_user_emoticon_group(
-        &self,
-        target_sort: bool,
-    ) -> Result<Vec<EmoticonGroup>> {
+    pub async fn get_user_emoticon_group(&self, target_sort: bool) -> Result<Vec<EmoticonGroup>> {
         let url = if target_sort {
             format!(
                 "{}/proc/emoticon_proc?mode=get_user_emoticon_group&target=sort",
@@ -156,10 +151,7 @@ impl Client {
     /// `POST /proc/emoticon_openstore` `mode=getImgtoGrpEmt` — find emoticon group by image URL.
     ///
     /// Server returns a pipe-prefixed JSON array: `OK|[{...},...]`.
-    pub async fn get_emoticon_group_by_img(
-        &self,
-        img_url: &str,
-    ) -> Result<Vec<EmoticonGroupInfo>> {
+    pub async fn get_emoticon_group_by_img(&self, img_url: &str) -> Result<Vec<EmoticonGroupInfo>> {
         let url = format!("{}/proc/emoticon_openstore", self.base_url);
         let resp = self
             .post_form(&url, &[("mode", "getImgtoGrpEmt"), ("img", img_url)])
@@ -178,12 +170,7 @@ impl Client {
         let body = resp.text().await.map_err(Error::Http)?;
         let r: BaseResponse<Value> = parse_base(&body)?;
         // Return the whole extra map as a Value since fields vary.
-        Ok(Value::Object(
-            r.extra
-                .into_iter()
-                .map(|(k, v)| (k, v))
-                .collect(),
-        ))
+        Ok(Value::Object(r.extra.into_iter().collect()))
     }
 }
 
@@ -193,9 +180,12 @@ impl Client {
 
 fn parse_ok_pipe_json<T: serde::de::DeserializeOwned>(body: &str) -> Result<T> {
     let body = body.trim();
-    let json_part = body
-        .strip_prefix("OK|")
-        .ok_or_else(|| Error::parse(format!("expected OK| prefix, got: {:?}", &body[..body.len().min(80)])))?;
+    let json_part = body.strip_prefix("OK|").ok_or_else(|| {
+        Error::parse(format!(
+            "expected OK| prefix, got: {:?}",
+            &body[..body.len().min(80)]
+        ))
+    })?;
     serde_json::from_str(json_part).map_err(Error::Json)
 }
 

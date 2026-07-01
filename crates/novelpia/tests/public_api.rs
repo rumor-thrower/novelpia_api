@@ -8,10 +8,10 @@
 //! environment variables (`LOGINKEY`, `CSRF_TOKEN`).
 
 use novelpia::{
-    parse_episode_list_html,
-    response::{parse_base, parse_viewer_lines, BaseResponse},
-    models::{EpisodeViewCount, NovelReviewItem},
     error::Error,
+    models::{EpisodeViewCount, NovelReviewItem},
+    parse_episode_list_html,
+    response::{BaseResponse, parse_base, parse_viewer_lines},
 };
 
 // ---------------------------------------------------------------------------
@@ -261,7 +261,10 @@ fn make_auth_client() -> novelpia::Client {
 async fn live_get_novel_review_list() {
     let client = make_auth_client();
     let reviews = client.get_novel_review_list(97958).await.unwrap();
-    assert!(!reviews.is_empty(), "expected at least one review for novel 97958");
+    assert!(
+        !reviews.is_empty(),
+        "expected at least one review for novel 97958"
+    );
     assert!(!reviews[0].novel_name.is_empty());
 }
 
@@ -281,7 +284,10 @@ async fn live_get_episode_view_counts() {
 async fn live_get_episode_list() {
     let client = make_client();
     let rows = client.get_episode_list(23, "DOWN", 0).await.unwrap();
-    assert!(!rows.is_empty(), "expected at least one episode row for novel 23");
+    assert!(
+        !rows.is_empty(),
+        "expected at least one episode row for novel 23"
+    );
     assert!(rows[0].episode_no > 0);
 }
 

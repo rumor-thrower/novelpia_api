@@ -3,11 +3,11 @@
 use scraper::{Html, Selector};
 
 use crate::{
+    Client,
     client::Toggle,
     error::{Error, Result},
     models::EpisodeListRow,
     response::parse_viewer_lines,
-    Client,
 };
 
 // ---------------------------------------------------------------------------
@@ -32,11 +32,7 @@ impl Client {
         let resp = self
             .post_form(
                 &url,
-                &[
-                    ("novel_no", &novel_no_s),
-                    ("sort", sort),
-                    ("page", &page_s),
-                ],
+                &[("novel_no", &novel_no_s), ("sort", sort), ("page", &page_s)],
             )
             .await?;
         let body = resp.text().await.map_err(Error::Http)?;
@@ -81,11 +77,7 @@ impl Client {
         let resp = self
             .post_form(
                 &url,
-                &[
-                    ("option", "vote_novel"),
-                    ("value", &ep_s),
-                    ("csrf", csrf),
-                ],
+                &[("option", "vote_novel"), ("value", &ep_s), ("csrf", csrf)],
             )
             .await?;
         let body = resp.text().await.map_err(Error::Http)?;
@@ -219,7 +211,9 @@ fn extract_episode_no(el: &scraper::ElementRef<'_>) -> Option<u64> {
     let html = el.inner_html();
     if let Some(pos) = html.find("/viewer/") {
         let after = &html[pos + 8..];
-        let end = after.find(|c: char| !c.is_ascii_digit()).unwrap_or(after.len());
+        let end = after
+            .find(|c: char| !c.is_ascii_digit())
+            .unwrap_or(after.len());
         if let Ok(n) = after[..end].parse() {
             return Some(n);
         }
