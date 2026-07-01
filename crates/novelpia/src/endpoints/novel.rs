@@ -88,9 +88,9 @@ impl Client {
 
     /// `POST /proc/novel_like` — toggle favourite (선호) for a novel.
     ///
-    /// Requires `LOGINKEY` and a CSRF token. Calling without credentials returns
-    /// `Toggle::Login`.
+    /// Requires `LOGINKEY` and a CSRF token.
     pub async fn toggle_novel_like(&self, novel_no: u64) -> Result<Toggle> {
+        self.require_auth()?;
         let csrf = self.csrf.as_deref().unwrap_or("");
         let url = format!("{}/proc/novel_like", self.base_url);
         let novel_no_s = novel_no.to_string();
