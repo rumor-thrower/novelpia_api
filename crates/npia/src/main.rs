@@ -106,7 +106,11 @@ enum Command {
         #[arg(long, action = ArgAction::SetTrue)]
         scalar: bool,
 
-        /// Filter array items whose `badge_memo` field matches this regex (e.g. "펀딩|후원")
+        /// Filter items by field and regex: FIELD=PATTERN (e.g. --grep badge_memo="펀딩|후원")
+        #[arg(long, value_name = "FIELD=PATTERN")]
+        grep: Option<String>,
+
+        /// Shorthand for --grep badge_memo=PATTERN
         #[arg(long)]
         grep_memo: Option<String>,
     },
@@ -217,7 +221,7 @@ async fn run(cli: &Cli, client: &novelpia::Client) -> Result<(), Box<dyn std::er
             }
         }
 
-        Command::Member { mem_no, mode, scalar, grep_memo } => {
+        Command::Member { mem_no, mode, scalar, grep, grep_memo } => {
             let val: serde_json::Value = match mode {
                 MemberMode::GetMember2 => client.get_member2(*mem_no).await?,
                 MemberMode::GetMemberView => {
@@ -233,10 +237,20 @@ async fn run(cli: &Cli, client: &novelpia::Client) -> Result<(), Box<dyn std::er
                 MemberMode::GetMemberDonation => client.get_member_donation(*mem_no).await?,
                 MemberMode::GetEpisodeCnt => client.get_episode_cnt(*mem_no).await?,
             };
-            if let Some(pattern) = grep_memo {
+            let grep_spec: Option<(&str, &str)> = if let Some(raw) = grep {
+                let (field, pattern) = raw
+                    .split_once('=')
+                    .ok_or_else(|| format!("--grep requires FIELD=PATTERN, got: {raw}"))?;
+                Some((field, pattern))
+            } else if let Some(pattern) = grep_memo {
+                Some(("badge_memo", pattern.as_str()))
+            } else {
+                None
+            };
+            if let Some((field, pattern)) = grep_spec {
                 let re = regex::Regex::new(pattern)
-                    .map_err(|e| format!("invalid --grep-memo pattern: {e}"))?;
-                let filtered = grep_memo_items(&val, &re);
+                    .map_err(|e| format!("invalid pattern: {e}"))?;
+                let filtered = grep_field_items(&val, field, &re);
                 println!("{}", serde_json::to_string_pretty(&filtered)?);
             } else if *scalar {
                 let target = val.get("result").unwrap_or(&val);
@@ -309,34 +323,35 @@ fn format_scalar(val: &serde_json::Value) -> Option<String> {
     }
 }
 
-/// Walk a JSON value, collecting every object that has a `memo` field whose
-/// string value matches `re`.  Descends into arrays and nested objects.
-fn grep_memo_items(val: &serde_json::Value, re: &regex::Regex) -> Vec<serde_json::Value> {
+/// Walk a JSON value, collecting every object whose `field` key has a string
+/// value matching `re`.  Descends into arrays and nested objects.
+fn grep_field_items(val: &serde_json::Value, field: &str, re: &regex::Regex) -> Vec<serde_json::Value> {
     let mut out = Vec::new();
-    collect_memo_matches(val, re, &mut out);
+    collect_field_matches(val, field, re, &mut out);
     out
 }
 
-fn collect_memo_matches(
+fn collect_field_matches(
     val: &serde_json::Value,
+    field: &str,
     re: &regex::Regex,
     out: &mut Vec<serde_json::Value>,
 ) {
     match val {
         serde_json::Value::Array(arr) => {
             for item in arr {
-                collect_memo_matches(item, re, out);
+                collect_field_matches(item, field, re, out);
             }
         }
         serde_json::Value::Object(map) => {
-            if let Some(serde_json::Value::String(memo)) = map.get("badge_memo").or_else(|| map.get("memo")) {
-                if re.is_match(memo) {
+            if let Some(serde_json::Value::String(s)) = map.get(field) {
+                if re.is_match(s) {
                     out.push(val.clone());
                     return;
                 }
             }
             for v in map.values() {
-                collect_memo_matches(v, re, out);
+                collect_field_matches(v, field, re, out);
             }
         }
         _ => {}
