@@ -259,7 +259,7 @@ fn make_auth_client() -> novelpia::Client {
 #[tokio::test]
 #[ignore]
 async fn live_get_novel_review_list() {
-    let client = make_client();
+    let client = make_auth_client();
     let reviews = client.get_novel_review_list(97958).await.unwrap();
     assert!(!reviews.is_empty(), "expected at least one review for novel 97958");
     assert!(!reviews[0].novel_name.is_empty());
