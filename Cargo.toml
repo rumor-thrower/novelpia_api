@@ -1,0 +1,13 @@
+[workspace]
+resolver = "2"
+members = ["crates/novelpia", "crates/npia"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+repository = "https://github.com/rumor-thrower/novelpia_api"
+
+[workspace.dependencies]
+novelpia = { path = "crates/novelpia" }
