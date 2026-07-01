@@ -33,47 +33,6 @@ pub(crate) mod serde_u64_or_str {
     }
 }
 
-/// Same as `serde_u64_or_str` but the field is `Option<u64>`.
-pub(crate) mod serde_opt_u64_or_str {
-    use serde::{de, Deserializer};
-    use std::fmt;
-
-    struct V;
-    impl<'de> de::Visitor<'de> for V {
-        type Value = Option<u64>;
-        fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            f.write_str("null, u64, or string-encoded u64")
-        }
-        fn visit_unit<E: de::Error>(self) -> Result<Self::Value, E> {
-            Ok(None)
-        }
-        fn visit_none<E: de::Error>(self) -> Result<Self::Value, E> {
-            Ok(None)
-        }
-        fn visit_some<D2: Deserializer<'de>>(
-            self,
-            d: D2,
-        ) -> Result<Self::Value, D2::Error> {
-            super::serde_u64_or_str::deserialize(d).map(Some)
-        }
-        fn visit_u64<E: de::Error>(self, v: u64) -> Result<Self::Value, E> {
-            Ok(Some(v))
-        }
-        fn visit_i64<E: de::Error>(self, v: i64) -> Result<Self::Value, E> {
-            u64::try_from(v).map(Some).map_err(de::Error::custom)
-        }
-        fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
-            if v.is_empty() {
-                Ok(None)
-            } else {
-                v.parse().map(Some).map_err(de::Error::custom)
-            }
-        }
-    }
-    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Option<u64>, D::Error> {
-        d.deserialize_any(V)
-    }
-}
 
 // ---------------------------------------------------------------------------
 // Novelpia serial-publication status
