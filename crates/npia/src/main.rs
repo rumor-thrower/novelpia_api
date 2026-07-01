@@ -101,6 +101,10 @@ enum Command {
         /// /proc/user mode
         #[arg(long, default_value = "get_member2")]
         mode: MemberMode,
+
+        /// Print only the scalar value from the `result` field (for numeric modes like get-episode-cnt)
+        #[arg(long, action = ArgAction::SetTrue)]
+        scalar: bool,
     },
 
     /// Fetch alarm count — POST /proc/alarm
@@ -209,7 +213,7 @@ async fn run(cli: &Cli, client: &novelpia::Client) -> Result<(), Box<dyn std::er
             }
         }
 
-        Command::Member { mem_no, mode } => {
+        Command::Member { mem_no, mode, scalar } => {
             let val: serde_json::Value = match mode {
                 MemberMode::GetMember2 => client.get_member2(*mem_no).await?,
                 MemberMode::GetMemberView => {
@@ -225,7 +229,18 @@ async fn run(cli: &Cli, client: &novelpia::Client) -> Result<(), Box<dyn std::er
                 MemberMode::GetMemberDonation => client.get_member_donation(*mem_no).await?,
                 MemberMode::GetEpisodeCnt => client.get_episode_cnt(*mem_no).await?,
             };
-            println!("{}", serde_json::to_string_pretty(&val)?);
+            if *scalar {
+                let scalar_val = val.get("result").unwrap_or(&val);
+                match scalar_val {
+                    serde_json::Value::String(s) => println!("{}", s),
+                    serde_json::Value::Number(n) => println!("{}", n),
+                    serde_json::Value::Bool(b) => println!("{}", b),
+                    serde_json::Value::Null => println!("null"),
+                    other => println!("{}", serde_json::to_string_pretty(other)?),
+                }
+            } else {
+                println!("{}", serde_json::to_string_pretty(&val)?);
+            }
         }
 
         Command::AlarmCnt => {
