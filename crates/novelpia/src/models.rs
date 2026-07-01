@@ -13,7 +13,7 @@ pub(crate) mod serde_u64_or_str {
     use std::fmt;
 
     struct V;
-    impl<'de> de::Visitor<'de> for V {
+    impl de::Visitor<'_> for V {
         type Value = u64;
         fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             f.write_str("u64 or string-encoded u64")

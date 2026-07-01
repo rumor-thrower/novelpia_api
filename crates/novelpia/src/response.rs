@@ -43,7 +43,7 @@ where
 {
     use serde::de::{self, Visitor};
     struct V;
-    impl<'de> Visitor<'de> for V {
+    impl Visitor<'_> for V {
         type Value = u16;
         fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             f.write_str("u16 or string-encoded u16")
