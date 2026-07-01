@@ -161,6 +161,55 @@ mod tests {
     use super::*;
 
     #[test]
+    fn into_result_ok_on_2xx_with_result() {
+        let r: BaseResponse<u64> = BaseResponse {
+            status: 200,
+            errmsg: String::new(),
+            result: Some(5),
+            extra: Default::default(),
+        };
+        assert_eq!(r.into_result().unwrap(), 5);
+    }
+
+    #[test]
+    fn into_result_err_auth_required_on_401_and_403() {
+        for status in [401u16, 403] {
+            let r: BaseResponse<Value> = BaseResponse {
+                status,
+                errmsg: String::new(),
+                result: None,
+                extra: Default::default(),
+            };
+            assert!(matches!(r.into_result().unwrap_err(), Error::AuthRequired));
+        }
+    }
+
+    #[test]
+    fn into_result_err_status_on_other_non_2xx() {
+        let r: BaseResponse<Value> = BaseResponse {
+            status: 500,
+            errmsg: "boom".into(),
+            result: None,
+            extra: Default::default(),
+        };
+        assert!(matches!(
+            r.into_result().unwrap_err(),
+            Error::Status { status: 500, .. }
+        ));
+    }
+
+    #[test]
+    fn into_result_err_parse_on_missing_result_with_2xx() {
+        let r: BaseResponse<Value> = BaseResponse {
+            status: 200,
+            errmsg: String::new(),
+            result: None,
+            extra: Default::default(),
+        };
+        assert!(matches!(r.into_result().unwrap_err(), Error::Parse(_)));
+    }
+
+    #[test]
     fn base_response_status_string() {
         let json = r#"{"status":"200","errmsg":""}"#;
         let r: BaseResponse = serde_json::from_str(json).unwrap();
