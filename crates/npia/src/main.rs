@@ -380,6 +380,23 @@ async fn fetch_all_episodes(
     Ok(all)
 }
 
+/// CSV row for `novel_<N>_views.csv` — `count_view` normalized to a plain
+/// integer (the API returns it as a comma-formatted string, e.g. "1,057").
+#[derive(Serialize)]
+struct ViewCountRow {
+    episode_no: u64,
+    count_view: Option<u64>,
+}
+
+impl From<&novelpia::models::EpisodeViewCount> for ViewCountRow {
+    fn from(v: &novelpia::models::EpisodeViewCount) -> Self {
+        Self {
+            episode_no: v.episode_no,
+            count_view: v.count_view_int(),
+        }
+    }
+}
+
 async fn run_export(
     client: &novelpia::Client,
     novel: u64,
@@ -405,8 +422,9 @@ async fn run_export(
             .get_episode_view_counts(novel, &episode_nos, false)
             .await?;
         view_rows = views.len();
+        let view_rows_csv: Vec<ViewCountRow> = views.iter().map(ViewCountRow::from).collect();
         let views_file = format!("novel_{novel}_views.csv");
-        write_csv_file(&out.join(&views_file), &views)?;
+        write_csv_file(&out.join(&views_file), &view_rows_csv)?;
         eprintln!("wrote {} ({} rows)", views_file, views.len());
         files.push(views_file);
     }
@@ -614,7 +632,7 @@ fn write_csv<W: std::io::Write>(
 
 #[cfg(test)]
 mod tests {
-    use super::{fetch_all_episodes, format_iso8601, format_scalar, write_csv};
+    use super::{ViewCountRow, fetch_all_episodes, format_iso8601, format_scalar, write_csv};
     use serde_json::json;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -799,5 +817,35 @@ mod tests {
     fn scalar_no_value() {
         assert_eq!(format_scalar(&json!({ "badge": [1, 2] })), None);
         assert_eq!(format_scalar(&json!([1, 2, 3])), None);
+    }
+
+    #[test]
+    fn view_count_row_normalizes_comma_formatted_count_view() {
+        let views = vec![
+            novelpia::models::EpisodeViewCount {
+                episode_no: 1134,
+                count_view: "172,224".into(),
+            },
+            novelpia::models::EpisodeViewCount {
+                episode_no: 1135,
+                count_view: "132,306".into(),
+            },
+        ];
+        let rows: Vec<ViewCountRow> = views.iter().map(ViewCountRow::from).collect();
+
+        assert_eq!(rows[0].count_view, Some(172_224));
+        assert_eq!(rows[1].count_view, Some(132_306));
+
+        // And the CSV cell itself must be a plain, unquoted number rather than
+        // the raw comma-formatted string — this is the export-facing bug we're
+        // guarding against.
+        let val = serde_json::to_value(&rows).unwrap();
+        let mut buf = Vec::new();
+        write_csv(&mut buf, &val).unwrap();
+        let out = String::from_utf8(buf).unwrap();
+        let lines: Vec<&str> = out.lines().collect();
+        assert_eq!(lines[0], "count_view,episode_no");
+        assert_eq!(lines[1], "172224,1134");
+        assert_eq!(lines[2], "132306,1135");
     }
 }
