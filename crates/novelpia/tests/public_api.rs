@@ -288,12 +288,12 @@ async fn live_get_episode_list() {
 #[tokio::test]
 #[ignore]
 async fn live_get_viewer_data_free_episode() {
-    // This test requires a known free episode number.
-    // Replace with a known-free episode number for the target novel.
+    // Defaults to a known free episode (novel 23, ep 1134); override via
+    // TEST_FREE_EPISODE for a different target.
     let ep_no: u64 = std::env::var("TEST_FREE_EPISODE")
         .ok()
         .and_then(|s| s.parse().ok())
-        .expect("set TEST_FREE_EPISODE to a known-free episode number");
+        .unwrap_or(1134);
     let client = make_client();
     let lines = client.get_viewer_data(ep_no).await.unwrap();
     assert!(!lines.is_empty(), "expected non-empty episode text");
