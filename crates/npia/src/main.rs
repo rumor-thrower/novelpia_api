@@ -101,6 +101,18 @@ enum Command {
         /// /proc/user mode
         #[arg(long, default_value = "get_member2")]
         mode: MemberMode,
+
+        /// Print only the scalar value from the `result` field (for numeric modes like get-episode-cnt)
+        #[arg(long, action = ArgAction::SetTrue)]
+        scalar: bool,
+
+        /// Filter items by field and regex: FIELD=PATTERN (e.g. --grep badge_memo="펀딩|후원")
+        #[arg(long, value_name = "FIELD=PATTERN")]
+        grep: Option<String>,
+
+        /// Shorthand for --grep badge_memo=PATTERN
+        #[arg(long)]
+        grep_memo: Option<String>,
     },
 
     /// Fetch alarm count — POST /proc/alarm
@@ -209,7 +221,7 @@ async fn run(cli: &Cli, client: &novelpia::Client) -> Result<(), Box<dyn std::er
             }
         }
 
-        Command::Member { mem_no, mode } => {
+        Command::Member { mem_no, mode, scalar, grep, grep_memo } => {
             let val: serde_json::Value = match mode {
                 MemberMode::GetMember2 => client.get_member2(*mem_no).await?,
                 MemberMode::GetMemberView => {
@@ -225,7 +237,30 @@ async fn run(cli: &Cli, client: &novelpia::Client) -> Result<(), Box<dyn std::er
                 MemberMode::GetMemberDonation => client.get_member_donation(*mem_no).await?,
                 MemberMode::GetEpisodeCnt => client.get_episode_cnt(*mem_no).await?,
             };
-            println!("{}", serde_json::to_string_pretty(&val)?);
+            let grep_spec: Option<(&str, &str)> = if let Some(raw) = grep {
+                let (field, pattern) = raw
+                    .split_once('=')
+                    .ok_or_else(|| format!("--grep requires FIELD=PATTERN, got: {raw}"))?;
+                Some((field, pattern))
+            } else if let Some(pattern) = grep_memo {
+                Some(("badge_memo", pattern.as_str()))
+            } else {
+                None
+            };
+            if let Some((field, pattern)) = grep_spec {
+                let re = regex::Regex::new(pattern)
+                    .map_err(|e| format!("invalid pattern: {e}"))?;
+                let filtered = grep_field_items(&val, field, &re);
+                println!("{}", serde_json::to_string_pretty(&filtered)?);
+            } else if *scalar {
+                let target = val.get("result").unwrap_or(&val);
+                match format_scalar(target) {
+                    Some(s) => println!("{}", s),
+                    None => eprintln!("note: no scalar value found in result"),
+                }
+            } else {
+                println!("{}", serde_json::to_string_pretty(&val)?);
+            }
         }
 
         Command::AlarmCnt => {
@@ -254,6 +289,74 @@ async fn run(cli: &Cli, client: &novelpia::Client) -> Result<(), Box<dyn std::er
 // ---------------------------------------------------------------------------
 // Output helpers
 // ---------------------------------------------------------------------------
+
+/// Reduce a value to the scalar text that `member --scalar` should print,
+/// discarding nested arrays and objects (e.g. `badge` lists).
+///
+/// - A primitive becomes its bare text.
+/// - An object is reduced to its scalar-valued fields; a single such field
+///   yields its bare value, multiple yield `key=value` lines.
+/// - Returns `None` when there is no scalar to print (empty object / array).
+fn format_scalar(val: &serde_json::Value) -> Option<String> {
+    match val {
+        serde_json::Value::String(s) => Some(s.clone()),
+        serde_json::Value::Number(n) => Some(n.to_string()),
+        serde_json::Value::Bool(b) => Some(b.to_string()),
+        serde_json::Value::Null => Some("null".to_string()),
+        serde_json::Value::Object(map) => {
+            let scalars: Vec<(&String, &serde_json::Value)> = map
+                .iter()
+                .filter(|(_, v)| !matches!(v, serde_json::Value::Array(_) | serde_json::Value::Object(_)))
+                .collect();
+            match scalars.as_slice() {
+                [] => None,
+                [(_, v)] => format_scalar(v),
+                many => Some(
+                    many.iter()
+                        .filter_map(|(k, v)| format_scalar(v).map(|s| format!("{}={}", k, s)))
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                ),
+            }
+        }
+        serde_json::Value::Array(_) => None,
+    }
+}
+
+/// Walk a JSON value, collecting every object whose `field` key has a string
+/// value matching `re`.  Descends into arrays and nested objects.
+fn grep_field_items(val: &serde_json::Value, field: &str, re: &regex::Regex) -> Vec<serde_json::Value> {
+    let mut out = Vec::new();
+    collect_field_matches(val, field, re, &mut out);
+    out
+}
+
+fn collect_field_matches(
+    val: &serde_json::Value,
+    field: &str,
+    re: &regex::Regex,
+    out: &mut Vec<serde_json::Value>,
+) {
+    match val {
+        serde_json::Value::Array(arr) => {
+            for item in arr {
+                collect_field_matches(item, field, re, out);
+            }
+        }
+        serde_json::Value::Object(map) => {
+            if let Some(serde_json::Value::String(s)) = map.get(field) {
+                if re.is_match(s) {
+                    out.push(val.clone());
+                    return;
+                }
+            }
+            for v in map.values() {
+                collect_field_matches(v, field, re, out);
+            }
+        }
+        _ => {}
+    }
+}
 
 fn print_output<T: Serialize>(items: &T, fmt: &OutputFormat) -> Result<(), Box<dyn std::error::Error>> {
     match fmt {
@@ -296,4 +399,46 @@ fn print_output<T: Serialize>(items: &T, fmt: &OutputFormat) -> Result<(), Box<d
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::format_scalar;
+    use serde_json::json;
+
+    #[test]
+    fn scalar_primitive() {
+        assert_eq!(format_scalar(&json!(713)), Some("713".to_string()));
+        assert_eq!(format_scalar(&json!("hi")), Some("hi".to_string()));
+    }
+
+    #[test]
+    fn scalar_object_ignores_arrays() {
+        // Real get_member_keep_novel result: badge list is discarded,
+        // leaving only the keep_novel count.
+        let result = json!({
+            "badge": [
+                { "badge_url": "/img/new/icon/episode1.svg", "cnt": 713, "is_use": 1, "limit": 1 },
+                { "badge_url": "/img/new/icon/episode2.svg", "cnt": 713, "is_use": 1, "limit": 100 }
+            ],
+            "keep_novel": 713
+        });
+        assert_eq!(format_scalar(&result), Some("713".to_string()));
+    }
+
+    #[test]
+    fn scalar_object_multiple_fields() {
+        let result = json!({ "read": 100, "comment": 5, "list": [1, 2] });
+        let out = format_scalar(&result).unwrap();
+        // key=value lines, arrays skipped; order follows serde_json map order.
+        assert!(out.contains("read=100"));
+        assert!(out.contains("comment=5"));
+        assert!(!out.contains("list"));
+    }
+
+    #[test]
+    fn scalar_no_value() {
+        assert_eq!(format_scalar(&json!({ "badge": [1, 2] })), None);
+        assert_eq!(format_scalar(&json!([1, 2, 3])), None);
+    }
 }
