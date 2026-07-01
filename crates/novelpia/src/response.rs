@@ -30,6 +30,13 @@ pub struct BaseResponse<T = Value> {
     pub extra: std::collections::HashMap<String, Value>,
 }
 
+pub(crate) fn de_status_pub<'de, D>(d: D) -> std::result::Result<u16, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    de_status(d)
+}
+
 fn de_status<'de, D>(d: D) -> std::result::Result<u16, D::Error>
 where
     D: serde::Deserializer<'de>,

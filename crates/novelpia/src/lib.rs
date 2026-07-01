@@ -9,11 +9,13 @@
 //! typed errors rather than panic.
 
 pub mod client;
+pub mod endpoints;
 pub mod error;
 pub mod models;
 pub mod response;
 
 pub use client::{Client, ClientBuilder, Toggle};
+pub use endpoints::misc::{EmoticonGroup, EmoticonGroupInfo, EmoticonItem};
 pub use error::{Error, Result};
 
 /// Base URL of the Novelpia Korean server.
