@@ -123,26 +123,28 @@ pub fn parse_episode_list_html(html: &str) -> Result<Vec<EpisodeListRow>> {
         let ep_no = extract_episode_no(&row);
         let Some(episode_no) = ep_no else { continue };
 
-        // Title: first matching <b>, with any leading badge text (e.g. "무료")
-        // stripped. The badge is a nested <span> whose text we remove.
+        // Title: first matching <b>, with any leading badge text (e.g. "무료",
+        // "19") stripped. A row may carry multiple badges (free + adult), each
+        // a nested <span> rendered before the title text, so peel them off one
+        // at a time in document order.
         let title = row
             .select(&title_sel)
             .next()
             .map(|el| {
-                let badge: String = el
-                    .select(&badge_sel)
-                    .next()
-                    .map(|b| b.text().collect())
-                    .unwrap_or_default();
                 let full: String = el.text().collect();
-                let trimmed = full.trim_start();
-                (if badge.is_empty() {
-                    trimmed
-                } else {
-                    trimmed.strip_prefix(badge.trim()).unwrap_or(trimmed)
-                })
-                .trim()
-                .to_owned()
+                let mut remaining = full.trim_start();
+                for badge in el.select(&badge_sel) {
+                    let badge_text: String = badge.text().collect();
+                    let badge_text = badge_text.trim();
+                    if badge_text.is_empty() {
+                        continue;
+                    }
+                    match remaining.strip_prefix(badge_text) {
+                        Some(rest) => remaining = rest.trim_start(),
+                        None => break,
+                    }
+                }
+                remaining.trim().to_owned()
             })
             .unwrap_or_default();
 
@@ -364,6 +366,32 @@ mod tests {
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].title, "뭐든지 가능한 유시아 아가씨! PLUS!!");
         assert!(!rows[0].is_free);
+    }
+
+    #[test]
+    fn parse_episode_list_strips_multiple_leading_badges() {
+        // Live markup for adult (19금) free episodes renders two leading
+        // badges back-to-back: `b_free` ("무료") then `b_19` ("19"), followed
+        // by `&nbsp;` and a bookmark icon before the actual title text. Only
+        // the first badge was previously stripped, leaving "19" glued onto
+        // the title.
+        let html = r#"
+        <table id="episode_table">
+            <tr class="ep_style5" data-episode-no="7146">
+                <td class=""><div class="episode_view_7146"></div></td>
+                <td class="font12"><b>
+                    <span class="b_free s_inv">무료</span>
+                    <span class="b_19 s_inv">19</span>&nbsp;
+                    <i class="icon ion-bookmark" id="bookmark_7146"></i>001. 능력 각성</b> <br>
+                </td>
+                <td class="ep_style3"></td>
+            </tr>
+        </table>
+        "#;
+        let rows = parse_episode_list_html(html).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].title, "001. 능력 각성");
+        assert!(rows[0].is_free);
     }
 
     #[test]

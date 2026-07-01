@@ -33,11 +33,17 @@ impl Client {
     // Episode view count (batch)
     // -----------------------------------------------------------------------
 
+    /// Maximum number of episode numbers sent to `get_episode_count_view` per
+    /// request. The server silently truncates responses beyond ~1000 rows, so
+    /// larger `episode_nos` slices must be split across multiple requests.
+    const EPISODE_VIEW_COUNT_BATCH_SIZE: usize = 100;
+
     /// `POST /proc/novel` `cmd=get_episode_count_view` (new variant) or
     /// `cmd=get_episode_cnt_view` (legacy variant).
     ///
-    /// Returns per-episode view counts for `episode_nos`. Batches up to ~100
-    /// episode numbers in one request using `episode_arr[N]` form fields.
+    /// Returns per-episode view counts for `episode_nos`. Batches up to
+    /// [`Self::EPISODE_VIEW_COUNT_BATCH_SIZE`] episode numbers per request,
+    /// issuing multiple requests and concatenating the results as needed.
     pub async fn get_episode_view_counts(
         &self,
         novel_no: u64,
@@ -49,6 +55,25 @@ impl Client {
                 "episode_nos must not be empty".into(),
             ));
         }
+        let mut results = Vec::with_capacity(episode_nos.len());
+        for chunk in episode_nos.chunks(Self::EPISODE_VIEW_COUNT_BATCH_SIZE) {
+            results.extend(
+                self.get_episode_view_counts_batch(novel_no, chunk, use_legacy_cmd)
+                    .await?,
+            );
+        }
+        Ok(results)
+    }
+
+    /// Single-request implementation backing [`Self::get_episode_view_counts`].
+    /// Callers should keep `episode_nos` at or below
+    /// [`Self::EPISODE_VIEW_COUNT_BATCH_SIZE`] entries.
+    async fn get_episode_view_counts_batch(
+        &self,
+        novel_no: u64,
+        episode_nos: &[u64],
+        use_legacy_cmd: bool,
+    ) -> Result<Vec<EpisodeViewCount>> {
         let url = format!("{}/proc/novel", self.base_url);
         let cmd = if use_legacy_cmd {
             "get_episode_cnt_view"
