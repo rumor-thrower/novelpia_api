@@ -10,6 +10,8 @@
 
 pub mod client;
 pub mod error;
+pub mod models;
+pub mod response;
 
 pub use client::{Client, ClientBuilder, Toggle};
 pub use error::{Error, Result};
