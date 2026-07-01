@@ -164,7 +164,7 @@ enum Command {
         no_views: bool,
 
         /// Stop after this many episode-list pages (0 = no limit)
-        #[arg(long, default_value = "0")]
+        #[arg(long, default_value = "50")]
         max_pages: u32,
     },
 }
@@ -348,8 +348,10 @@ struct ExportManifest {
     files: Vec<String>,
 }
 
-/// Fetch episode-list pages until an empty page is returned or `max_pages`
-/// is reached (`max_pages == 0` means no limit).
+/// Fetch episode-list pages until an empty page is returned, `max_pages` is
+/// reached (`max_pages == 0` means no limit), or the server repeats the
+/// previous page (some deployments clamp an out-of-range `page` to the last
+/// valid one instead of returning an empty result).
 async fn fetch_all_episodes(
     client: &novelpia::Client,
     novel: u64,
@@ -358,6 +360,7 @@ async fn fetch_all_episodes(
 ) -> Result<Vec<novelpia::models::EpisodeListRow>, Box<dyn std::error::Error>> {
     let mut all = Vec::new();
     let mut page = 0u32;
+    let mut prev_episode_nos: Option<Vec<u64>> = None;
     loop {
         if max_pages != 0 && page >= max_pages {
             break;
@@ -366,7 +369,12 @@ async fn fetch_all_episodes(
         if rows.is_empty() {
             break;
         }
+        let episode_nos: Vec<u64> = rows.iter().map(|e| e.episode_no).collect();
+        if prev_episode_nos.as_ref() == Some(&episode_nos) {
+            break;
+        }
         all.extend(rows);
+        prev_episode_nos = Some(episode_nos);
         page += 1;
     }
     Ok(all)
