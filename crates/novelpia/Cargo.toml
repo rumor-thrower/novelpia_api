@@ -7,4 +7,22 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[features]
+default = []
+# AES decryption of the viewer `c` field. Key derivation is not yet reverse-
+# engineered, so this is off by default and the raw ciphertext is returned.
+decrypt = ["dep:aes", "dep:cbc", "dep:base64"]
+
 [dependencies]
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time"] }
+reqwest = { version = "0.11", default-features = false, features = ["json", "cookies", "gzip", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+scraper = "0.18"
+thiserror = "1"
+rand = "0.8"
+
+# Optional, enabled by the `decrypt` feature.
+aes = { version = "0.8", optional = true }
+cbc = { version = "0.1", optional = true }
+base64 = { version = "0.21", optional = true }
