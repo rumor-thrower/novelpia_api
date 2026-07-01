@@ -202,17 +202,19 @@ impl Client {
             .await?;
         let body = resp.text().await.map_err(Error::Http)?;
 
-        #[derive(Deserialize)]
-        struct BlockEntry {
-            mem_no: u64,
-        }
+        // The API returns `user_block` as an array of member-number strings,
+        // e.g. `["68187", "512785", ...]`.
         #[derive(Deserialize)]
         struct Inner {
-            user_block: Vec<BlockEntry>,
+            user_block: Vec<String>,
         }
         let r: BaseResponse<Inner> = parse_base(&body)?;
         let inner = r.into_result()?;
-        Ok(inner.user_block.into_iter().map(|e| e.mem_no).collect())
+        Ok(inner
+            .user_block
+            .into_iter()
+            .filter_map(|s| s.parse().ok())
+            .collect())
     }
 }
 
