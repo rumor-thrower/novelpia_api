@@ -260,8 +260,8 @@ fn make_auth_client() -> novelpia::Client {
 #[ignore]
 async fn live_get_novel_review_list() {
     let client = make_client();
-    let reviews = client.get_novel_review_list(23).await.unwrap();
-    assert!(!reviews.is_empty(), "expected at least one review for novel 23");
+    let reviews = client.get_novel_review_list(97958).await.unwrap();
+    assert!(!reviews.is_empty(), "expected at least one review for novel 97958");
     assert!(!reviews[0].novel_name.is_empty());
 }
 
