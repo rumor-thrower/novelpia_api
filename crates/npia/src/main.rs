@@ -106,7 +106,7 @@ enum Command {
         #[arg(long, action = ArgAction::SetTrue)]
         scalar: bool,
 
-        /// Filter array items whose `memo` field matches this regex (e.g. "펀딩|후원")
+        /// Filter array items whose `badge_memo` field matches this regex (e.g. "펀딩|후원")
         #[arg(long)]
         grep_memo: Option<String>,
     },
@@ -329,7 +329,7 @@ fn collect_memo_matches(
             }
         }
         serde_json::Value::Object(map) => {
-            if let Some(serde_json::Value::String(memo)) = map.get("memo") {
+            if let Some(serde_json::Value::String(memo)) = map.get("badge_memo").or_else(|| map.get("memo")) {
                 if re.is_match(memo) {
                     out.push(val.clone());
                     return;
