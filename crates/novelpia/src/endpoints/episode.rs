@@ -105,6 +105,10 @@ pub fn parse_episode_list_html(html: &str) -> Result<Vec<EpisodeListRow>> {
     // Free/plus/adult badge markers.
     let free_sel = Selector::parse("span.b_free")
         .map_err(|e| Error::parse(format!("free selector parse error: {:?}", e)))?;
+    // Any badge (free/plus/adult) whose leading text should be stripped from
+    // the title.
+    let badge_sel = Selector::parse("span.b_free, span.b_plus, span.b_19")
+        .map_err(|e| Error::parse(format!("badge selector parse error: {:?}", e)))?;
     let legacy_date_sel = Selector::parse(".ep_date, .p_date")
         .map_err(|e| Error::parse(format!("date selector parse error: {:?}", e)))?;
     // Live view count.
@@ -126,7 +130,7 @@ pub fn parse_episode_list_html(html: &str) -> Result<Vec<EpisodeListRow>> {
             .next()
             .map(|el| {
                 let badge: String = el
-                    .select(&free_sel)
+                    .select(&badge_sel)
                     .next()
                     .map(|b| b.text().collect())
                     .unwrap_or_default();
@@ -342,9 +346,8 @@ mod tests {
 
     #[test]
     fn parse_episode_list_title_with_plus_badge_and_matching_word() {
-        // `b_plus` isn't matched by `free_sel`, so `badge` stays empty and
-        // nothing is stripped from the title text — including its own
-        // leading "PLUS" span text, which is left in place verbatim.
+        // The leading `b_plus` badge is stripped like `b_free`, but the
+        // trailing "PLUS!!" inside the actual title text is left intact.
         let html = r#"
         <table id="episode_table">
             <tr class="ep_style5" data-episode-no="99">
@@ -359,10 +362,7 @@ mod tests {
         "#;
         let rows = parse_episode_list_html(html).unwrap();
         assert_eq!(rows.len(), 1);
-        assert_eq!(
-            rows[0].title,
-            "PLUS\n                    뭐든지 가능한 유시아 아가씨! PLUS!!"
-        );
+        assert_eq!(rows[0].title, "뭐든지 가능한 유시아 아가씨! PLUS!!");
         assert!(!rows[0].is_free);
     }
 
