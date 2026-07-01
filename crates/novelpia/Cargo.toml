@@ -1,0 +1,10 @@
+[package]
+name = "novelpia"
+description = "Unofficial Novelpia web-novel platform API client (library)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
