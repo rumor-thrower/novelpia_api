@@ -821,7 +821,7 @@ mod tests {
 
     #[test]
     fn view_count_row_normalizes_comma_formatted_count_view() {
-        let views = vec![
+        let views = [
             novelpia::models::EpisodeViewCount {
                 episode_no: 1134,
                 count_view: "172,224".into(),
