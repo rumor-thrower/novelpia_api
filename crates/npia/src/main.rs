@@ -105,6 +105,10 @@ enum Command {
         /// Print only the scalar value from the `result` field (for numeric modes like get-episode-cnt)
         #[arg(long, action = ArgAction::SetTrue)]
         scalar: bool,
+
+        /// Filter array items whose `memo` field matches this regex (e.g. "펀딩|후원")
+        #[arg(long)]
+        grep_memo: Option<String>,
     },
 
     /// Fetch alarm count — POST /proc/alarm
@@ -213,7 +217,7 @@ async fn run(cli: &Cli, client: &novelpia::Client) -> Result<(), Box<dyn std::er
             }
         }
 
-        Command::Member { mem_no, mode, scalar } => {
+        Command::Member { mem_no, mode, scalar, grep_memo } => {
             let val: serde_json::Value = match mode {
                 MemberMode::GetMember2 => client.get_member2(*mem_no).await?,
                 MemberMode::GetMemberView => {
@@ -229,7 +233,12 @@ async fn run(cli: &Cli, client: &novelpia::Client) -> Result<(), Box<dyn std::er
                 MemberMode::GetMemberDonation => client.get_member_donation(*mem_no).await?,
                 MemberMode::GetEpisodeCnt => client.get_episode_cnt(*mem_no).await?,
             };
-            if *scalar {
+            if let Some(pattern) = grep_memo {
+                let re = regex::Regex::new(pattern)
+                    .map_err(|e| format!("invalid --grep-memo pattern: {e}"))?;
+                let filtered = grep_memo_items(&val, &re);
+                println!("{}", serde_json::to_string_pretty(&filtered)?);
+            } else if *scalar {
                 let target = val.get("result").unwrap_or(&val);
                 match format_scalar(target) {
                     Some(s) => println!("{}", s),
@@ -297,6 +306,40 @@ fn format_scalar(val: &serde_json::Value) -> Option<String> {
             }
         }
         serde_json::Value::Array(_) => None,
+    }
+}
+
+/// Walk a JSON value, collecting every object that has a `memo` field whose
+/// string value matches `re`.  Descends into arrays and nested objects.
+fn grep_memo_items(val: &serde_json::Value, re: &regex::Regex) -> Vec<serde_json::Value> {
+    let mut out = Vec::new();
+    collect_memo_matches(val, re, &mut out);
+    out
+}
+
+fn collect_memo_matches(
+    val: &serde_json::Value,
+    re: &regex::Regex,
+    out: &mut Vec<serde_json::Value>,
+) {
+    match val {
+        serde_json::Value::Array(arr) => {
+            for item in arr {
+                collect_memo_matches(item, re, out);
+            }
+        }
+        serde_json::Value::Object(map) => {
+            if let Some(serde_json::Value::String(memo)) = map.get("memo") {
+                if re.is_match(memo) {
+                    out.push(val.clone());
+                    return;
+                }
+            }
+            for v in map.values() {
+                collect_memo_matches(v, re, out);
+            }
+        }
+        _ => {}
     }
 }
 
