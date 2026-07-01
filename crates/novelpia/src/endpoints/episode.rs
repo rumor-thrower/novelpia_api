@@ -131,7 +131,14 @@ pub fn parse_episode_list_html(html: &str) -> Result<Vec<EpisodeListRow>> {
                     .map(|b| b.text().collect())
                     .unwrap_or_default();
                 let full: String = el.text().collect();
-                full.replace(&badge, "").trim().to_owned()
+                let trimmed = full.trim_start();
+                (if badge.is_empty() {
+                    trimmed
+                } else {
+                    trimmed.strip_prefix(badge.trim()).unwrap_or(trimmed)
+                })
+                .trim()
+                .to_owned()
             })
             .unwrap_or_default();
 
@@ -310,6 +317,27 @@ mod tests {
         assert!(rows[0].is_free);
         assert_eq!(rows[0].reg_date.as_deref(), Some("21.01.07"));
         assert_eq!(rows[0].count_view.as_deref(), Some("42"));
+    }
+
+    #[test]
+    fn parse_episode_list_title_keeps_badge_text_inside_title() {
+        // The badge text ("무료") also appears inside the actual title. Only
+        // the leading badge occurrence should be stripped, not this one.
+        let html = r#"
+        <table id="episode_table">
+            <tr class="ep_style5" data-episode-no="42">
+                <td class=""><div class="episode_view_42"></div></td>
+                <td class="font12"><b>
+                    <span class="b_free s_inv">무료</span>
+                    <i class="icon ion-bookmark" id="bookmark_42"></i>이 악마들은 무료로 해줍니다.</b> <br>
+                </td>
+                <td class="ep_style3"></td>
+            </tr>
+        </table>
+        "#;
+        let rows = parse_episode_list_html(html).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].title, "이 악마들은 무료로 해줍니다.");
     }
 
     #[test]
