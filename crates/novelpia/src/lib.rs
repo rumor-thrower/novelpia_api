@@ -8,5 +8,11 @@
 //! The API is unofficial and may change; parsers are written to fail soft with
 //! typed errors rather than panic.
 
+pub mod client;
+pub mod error;
+
+pub use client::{Client, ClientBuilder, Toggle};
+pub use error::{Error, Result};
+
 /// Base URL of the Novelpia Korean server.
 pub const BASE_URL: &str = "https://novelpia.com";
