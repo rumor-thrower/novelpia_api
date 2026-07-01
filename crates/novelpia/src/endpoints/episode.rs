@@ -341,6 +341,32 @@ mod tests {
     }
 
     #[test]
+    fn parse_episode_list_title_with_plus_badge_and_matching_word() {
+        // `b_plus` isn't matched by `free_sel`, so `badge` stays empty and
+        // nothing is stripped from the title text — including its own
+        // leading "PLUS" span text, which is left in place verbatim.
+        let html = r#"
+        <table id="episode_table">
+            <tr class="ep_style5" data-episode-no="99">
+                <td class=""><div class="episode_view_99"></div></td>
+                <td class="font12"><b>
+                    <span class="b_plus s_inv">PLUS</span>
+                    <i class="icon ion-bookmark" id="bookmark_99"></i>뭐든지 가능한 유시아 아가씨! PLUS!!</b> <br>
+                </td>
+                <td class="ep_style3"></td>
+            </tr>
+        </table>
+        "#;
+        let rows = parse_episode_list_html(html).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(
+            rows[0].title,
+            "PLUS\n                    뭐든지 가능한 유시아 아가씨! PLUS!!"
+        );
+        assert!(!rows[0].is_free);
+    }
+
+    #[test]
     fn parse_episode_list_viewer_href() {
         let html = r#"
         <ul>
