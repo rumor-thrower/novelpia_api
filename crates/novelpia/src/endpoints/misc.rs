@@ -1,6 +1,6 @@
 //! Miscellaneous endpoints: alarm, member_plus, emoticon_proc, emoticon_openstore.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
@@ -54,7 +54,7 @@ impl Client {
 // ---------------------------------------------------------------------------
 
 /// An emoticon group entry from `get_user_emoticon_group`.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmoticonGroup {
     pub emoticon_group: u64,
     #[serde(default)]
@@ -65,7 +65,7 @@ pub struct EmoticonGroup {
 }
 
 /// An emoticon item entry from `get_user_emoticon`.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmoticonItem {
     pub emoticon_no: u64,
     #[serde(default)]
@@ -142,7 +142,7 @@ impl Client {
 // ---------------------------------------------------------------------------
 
 /// Result item from `getImgtoGrpEmt`.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmoticonGroupInfo {
     #[serde(default)]
     pub emoticon_group: Option<u64>,

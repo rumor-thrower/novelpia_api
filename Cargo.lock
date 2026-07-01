@@ -939,6 +939,7 @@ dependencies = [
  "clap",
  "csv",
  "novelpia",
+ "serde",
  "serde_json",
  "tokio",
 ]
