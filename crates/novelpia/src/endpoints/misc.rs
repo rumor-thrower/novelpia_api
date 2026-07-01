@@ -28,8 +28,12 @@ impl Client {
             cnt: u64,
         }
         let r: BaseResponse<AlarmResult> = parse_base(&body)?;
-        // Non-2xx body status → auth or error; let into_result handle it.
-        Ok(r.into_result().map(|a| a.cnt).unwrap_or(0))
+        match r.into_result() {
+            Ok(a) => Ok(a.cnt),
+            // Unauthenticated → server-documented 0, not an error.
+            Err(Error::AuthRequired) => Ok(0),
+            Err(e) => Err(e),
+        }
     }
 }
 
