@@ -163,8 +163,11 @@ enum Command {
         #[arg(long, action = ArgAction::SetTrue)]
         no_views: bool,
 
-        /// Stop after this many episode-list pages (0 = no limit)
-        #[arg(long, default_value = "50")]
+        /// Stop after this many episode-list pages (0 = no limit). The server
+        /// paginates at ~20 episodes per page, so 50 silently truncated any
+        /// novel past 1,000 episodes; default to unlimited and rely on the
+        /// empty-page/repeated-page stop conditions in `fetch_all_episodes`.
+        #[arg(long, default_value = "0")]
         max_pages: u32,
     },
 }
