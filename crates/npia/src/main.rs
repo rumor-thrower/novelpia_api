@@ -145,13 +145,14 @@ enum Command {
     },
 
     /// Export a novel's data bundle (episodes, view counts, reviews) to CSV/JSON
-    /// files — the handoff artifacts consumed by the analysis layer.
+    /// files — the handoff artifacts consumed by the analysis layer. Files are
+    /// written under `<out>/<novel>/`.
     Export {
         /// Novel number
         #[arg(long)]
         novel: u64,
 
-        /// Output directory (created if missing)
+        /// Output root directory; files are written under `<out>/<novel>/` (created if missing)
         #[arg(long, default_value = ".")]
         out: PathBuf,
 
@@ -403,7 +404,8 @@ async fn run_export(
     no_views: bool,
     max_pages: u32,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    std::fs::create_dir_all(out)?;
+    let novel_dir = out.join(novel.to_string());
+    std::fs::create_dir_all(&novel_dir)?;
 
     // 1. Episode list (paginated).
     let episodes = fetch_all_episodes(client, novel, sort, max_pages).await?;
@@ -435,17 +437,25 @@ async fn run_export(
             count_view: view_counts.get(&e.episode_no).copied().flatten(),
         })
         .collect();
-    let episodes_file = format!("novel_{novel}_episodes.csv");
-    write_csv_file(&out.join(&episodes_file), &export_rows)?;
-    eprintln!("wrote {} ({} episodes)", episodes_file, export_rows.len());
-    let mut files = vec![episodes_file];
+    let episodes_file = "episodes.csv";
+    write_csv_file(&novel_dir.join(episodes_file), &export_rows)?;
+    eprintln!(
+        "wrote {} ({} episodes)",
+        novel_dir.join(episodes_file).display(),
+        export_rows.len()
+    );
+    let mut files = vec![episodes_file.to_string()];
 
     // 3. Reviews.
     let reviews = client.get_novel_review_list(novel).await?;
-    let reviews_file = format!("novel_{novel}_reviews.csv");
-    write_csv_file(&out.join(&reviews_file), &reviews)?;
-    eprintln!("wrote {} ({} reviews)", reviews_file, reviews.len());
-    files.push(reviews_file);
+    let reviews_file = "reviews.csv";
+    write_csv_file(&novel_dir.join(reviews_file), &reviews)?;
+    eprintln!(
+        "wrote {} ({} reviews)",
+        novel_dir.join(reviews_file).display(),
+        reviews.len()
+    );
+    files.push(reviews_file.to_string());
 
     // 4. Manifest.
     let manifest = ExportManifest {
@@ -457,7 +467,7 @@ async fn run_export(
         review_count: reviews.len(),
         files,
     };
-    let manifest_path = out.join(format!("novel_{novel}_manifest.json"));
+    let manifest_path = novel_dir.join("manifest.json");
     std::fs::write(&manifest_path, serde_json::to_string_pretty(&manifest)?)?;
     eprintln!("wrote {}", manifest_path.display());
 
