@@ -227,6 +227,9 @@ pub struct EpisodeListRow {
     pub title: String,
     /// 무료 여부 (free=true, plus=false)
     pub is_free: bool,
+    /// 19금 여부
+    #[serde(default)]
+    pub is_adult: bool,
     #[serde(default)]
     pub reg_date: Option<String>,
     /// 조회수 텍스트 (e.g. "1,234")
