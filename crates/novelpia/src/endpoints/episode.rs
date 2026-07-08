@@ -105,6 +105,8 @@ pub fn parse_episode_list_html(html: &str) -> Result<Vec<EpisodeListRow>> {
     // Free/plus/adult badge markers.
     let free_sel = Selector::parse("span.b_free")
         .map_err(|e| Error::parse(format!("free selector parse error: {:?}", e)))?;
+    let adult_sel = Selector::parse("span.b_19")
+        .map_err(|e| Error::parse(format!("adult selector parse error: {:?}", e)))?;
     // Any badge (free/plus/adult) whose leading text should be stripped from
     // the title.
     let badge_sel = Selector::parse("span.b_free, span.b_plus, span.b_19")
@@ -151,6 +153,7 @@ pub fn parse_episode_list_html(html: &str) -> Result<Vec<EpisodeListRow>> {
         // Free episodes carry a `span.b_free` badge (무료); plus/adult episodes
         // use `b_plus`/`b_19` instead.
         let is_free = row.select(&free_sel).next().is_some();
+        let is_adult = row.select(&adult_sel).next().is_some();
 
         // Date: legacy `.ep_date`, else the `NN.NN.NN` run in the live markup.
         let reg_date = row
@@ -169,6 +172,7 @@ pub fn parse_episode_list_html(html: &str) -> Result<Vec<EpisodeListRow>> {
             episode_no,
             title,
             is_free,
+            is_adult,
             reg_date: reg_date.filter(|s| !s.is_empty()),
             count_view: count_view.filter(|s| !s.is_empty()),
         });
@@ -392,6 +396,7 @@ mod tests {
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].title, "001. 능력 각성");
         assert!(rows[0].is_free);
+        assert!(rows[0].is_adult);
     }
 
     #[test]
